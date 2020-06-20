@@ -17,15 +17,15 @@ PmEHash::PmEHash() {
 	else {
 		int is_pmem;
 		size_t mapped_len;
-		metadata = (ehash_metadata *)pmem_map_file(PM_EHASH_DIRECTORY META_NAME, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
+		metadata = (ehash_metadata*)pmem_map_file(PM_EHASH_DIRECTORY META_NAME, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
 		metadata->max_file_id = 1;
 		metadata->catalog_size = 0;
 		metadata->global_depth = 0;		
-
-		/*ehash_catalog* catalog_addr = &catalog;
-		catalog_addr = (ehash_catalog *)pmem_map_file(PM_EHASH_DIRECTORY CATALOG_NAME, sizeof(catalog), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
-		catalog.buckets_pm_address->fileId = 1;
-		catalog.buckets_pm_address->offset = 0;*/		
+		
+		catalog.buckets_pm_address = (pm_address*)pmem_map_file(PM_EHASH_DIRECTORY CATALOG_NAME, sizeof(catalog), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
+		(*(catalog.buckets_pm_address))->fileId = 1;
+		(*(catalog.buckets_pm_address))->offset = 0;
+		//buckets_virtual_address ??	
 	}
 }
 /**
@@ -41,12 +41,12 @@ PmEHash::~PmEHash() {
 		pmem_msync(metadata, sizeof(ehash_metadata));
 	pmem_unmap(metadata, sizeof(ehash_metadata));
 
-	/*is_pmem = pmem_is_pmem();
+	is_pmem = pmem_is_pmem(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
 	if (is_pmem)
-		pmem_persist(catalog_addr, mapped_len);
+		pmem_persist(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
 	else
-		pmem_msync(catalog_addr, mapped_len);
-	pmem_unmap(catalog_addr, mapped_len);*/
+		pmem_msync(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
+	pmem_unmap(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
 }
 
 /**
@@ -77,8 +77,9 @@ int PmEHash::remove(uint64_t key) {
 	pm_bucket bucket = *(virtual_address[bucket_id]);
 
 	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
-		kv temp = bucket.slot[i];
-		if (temp.key == key) {
+		kv* temp = bucket.slot + i;
+		if (temp == NULL)	break;
+		if ((*temp).key == key) {
 			bucket->bitmap[i / 8] &= ~(1 << (BUCKET_SLOT_NUM - i - 1));
 			if (i == 0)
 				mergeBucket(bucket_id);
@@ -98,8 +99,9 @@ int PmEHash::update(kv kv_pair) {
 	pm_bucket bucket = *(virtual_address[bucket_id]);
 
 	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
-		kv temp = bucket.slot[i];
-		if (temp.key == kv_pair.key) {
+		kv* temp = bucket.slot + i;
+		if (temp == NULL)	break;
+		if ((*temp).key == kv_pair.key) {
 			(bucket.slot[i]).value = kv_pair.value;
 			return 0;
 		}
@@ -117,12 +119,11 @@ int PmEHash::search(uint64_t key, uint64_t& return_val) {
 	pm_bucket** virtual_address = catalog.buckets_virtual_address;
 	pm_bucket bucket = *(virtual_address[bucket_id]);
 
-	//??????
 	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
-		//if slot empty	  break;
-		kv temp = bucket.slot[i];
-		if (temp.key == key) {
-			return_val = temp.value;
+		kv* temp = bucket.slot + i;
+		if (temp == NULL)	break;
+		if ((*temp).key == key) {
+			return_val = (*temp).value;
 			return 0;
 		}
 	}
