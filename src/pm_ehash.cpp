@@ -136,8 +136,7 @@ int PmEHash::search(uint64_t key, uint64_t& return_val) {
  * @return: 返回键所属的桶号
  */
 uint64_t PmEHash::hashFunc(uint64_t key) {
-	uint64_t hash_value = key / metadata->catalog_size;
-    return hash_value;
+
 }
 
 /**
@@ -146,11 +145,7 @@ uint64_t PmEHash::hashFunc(uint64_t key) {
  * @return: 空闲桶的虚拟地址
  */
 pm_bucket* PmEHash::getFreeBucket(uint64_t key) {
-	uint64_t hash_value = hashFunc(key);
-    pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[hash_value])->second;
-    kv* free_slot = getFreeKvSlot(bu);
-    if(free_slot == NULL) splitBucket(hash_value);
-    return pmAddr2vAddr.find(catalog.buckets_pm_address[hash_value])->second;
+
 }
 
 /**
@@ -159,16 +154,7 @@ pm_bucket* PmEHash::getFreeBucket(uint64_t key) {
  * @return: 空闲键值对位置的虚拟地址
  */
 kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
-	kv* freekv = NULL;
-    for(int i = 0; i < BUCKET_SLOT_NUM / 8 + 1; i++){
-        for(int j = 0; j < 8; j++){
-            if((((bucket->bitmap[i]) & (1 << j)) >> j) == 0){
-                freekv = &(bucket->slot[j + i * 8]);
-                return freekv;
-            }
-        }
-    }
-    return freekv;
+
 }
 
 /**
@@ -177,46 +163,7 @@ kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
  * @return: NULL
  */
 void PmEHash::splitBucket(uint64_t bucket_id) {
-	pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
-    bu->local_depth++;
-    if(bu->local_depth > metadata->global_depth) extendCatalog();
-    pm_bucket* new_bu;
-    new_bu->local_depth = bu->local_depth;
 
-    pm_address new_pm_addr;
-    if(catalog.buckets_pm_address[metadata->catalog_size].offset == 120){
-        new_pm_addr.offset = 0;
-        new_pm_addr.fileId = metadata->max_file_id;
-    }
-    else{
-        new_pm_addr.offset = catalog.buckets_pm_address[metadata->catalog_size].offset + 8;
-        new_pm_addr.fileId = metadata->max_file_id - 1;
-    }  
-    
-    for(int i = 0; i < metadata->catalog_size; i += pow(2,metadata->global_depth - bu->local_depth + 1)){
-        int j = i + pow(2,  metadata->global_depth - bu->local_depth + 1);
-        if(bucket_id >= i && bucket_id < j){
-            int m = 0;
-            for(int n = 0; n < BUCKET_SLOT_NUM; n++){
-             if(hashFunc(bu->slot[n].key) >= i + pow(2,  metadata->global_depth - bu->local_depth)){
-                    bu->bitmap[n / 8] ^= (bu->bitmap[n / 8] & (1 << (n / 8))) ^ (0 << (n / 8));
-                    new_bu->slot[m] = bu->slot[n];
-                    new_bu->bitmap[m / 8] ^= (new_bu->bitmap[m / 8] & (1 << (m / 8))) ^ (1 << (m / 8)); 
-                }
-            }
-
-            pm_bucket** free_slot = (pm_bucket**)getFreeSlot(new_pm_addr);
-            free_slot = &new_bu;
-
-            for(int k = i + pow(2,metadata->global_depth - bu->local_depth); k < j; k++){
-                catalog.buckets_pm_address[k] = new_pm_addr;
-                catalog.buckets_virtual_address[k] = *free_slot;
-            }
-            break;
-        }
-    }
-    pmAddr2vAddr.insert(std::make_pair(new_pm_addr,bu));
-    vAddr2pmAddr.insert(std::make_pair(bu,new_pm_addr));
 }
 
 /**
@@ -225,38 +172,7 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
  * @return: NULL
  */
 void PmEHash::mergeBucket(uint64_t bucket_id) {
-	pm_address addr = catalog.buckets_pm_address[bucket_id];
-    pm_bucket* vir_addr = pmAddr2vAddr.find(addr)->second;
-    pmAddr2vAddr.erase(addr);
-    vAddr2pmAddr.erase(vir_addr);
-    freePageSlot(catalog.buckets_virtual_address[bucket_id]);
-    free_list.push(catalog.buckets_virtual_address[bucket_id]);
 
-    pm_bucket* origin_vir_addr;
-    pm_address origin_addr;
-    for(int i = 0; i < metadata->catalog_size; i += pow(2,metadata->global_depth - vir_addr->local_depth + 1)){
-        int j = i + pow(2,  metadata->global_depth - vir_addr->local_depth + 1);
-        if(bucket_id >= i && bucket_id < j){
-            if(bucket_id < i + pow(2,  metadata->global_depth - vir_addr->local_depth)){
-                origin_addr = catalog.buckets_pm_address[j - 1];
-                origin_vir_addr = pmAddr2vAddr.find(origin_addr)->second;
-                for(int k = i + pow(2,metadata->global_depth - vir_addr->local_depth); k < j; k++){
-                    catalog.buckets_pm_address[k] = origin_addr;
-                    catalog.buckets_virtual_address[k] = origin_vir_addr; 
-                }
-            }
-            else{
-                origin_addr = catalog.buckets_pm_address[i];
-                origin_vir_addr = pmAddr2vAddr.find(origin_addr)->second;
-                for(int k = i ; k < i + pow(2,metadata->global_depth - vir_addr->local_depth); k++){
-                    catalog.buckets_pm_address[k] = origin_addr;
-                    catalog.buckets_virtual_address[k] = origin_vir_addr; 
-                }
-            }
-            break;
-        }
-    }
-    origin_vir_addr->local_depth--;
 }
 
 /**
@@ -265,19 +181,7 @@ void PmEHash::mergeBucket(uint64_t bucket_id) {
  * @return: NULL
  */
 void PmEHash::extendCatalog() {
-	ehash_catalog* new_catalog;
-    for(int i = 0; i < metadata->catalog_size; i++){
-        new_catalog->buckets_pm_address[i * 2] = catalog.buckets_pm_address[i];
-        new_catalog->buckets_pm_address[i * 2 + 1] = catalog.buckets_pm_address[i];
-        new_catalog->buckets_virtual_address[i * 2] = catalog.buckets_virtual_address[i];
-        new_catalog->buckets_virtual_address[i * 2 + 1] = catalog.buckets_virtual_address[i];
-    }
-    delete(catalog.buckets_pm_address);
-    delete(catalog.buckets_virtual_address);
-    catalog = *new_catalog;
-    delete(new_catalog);
-    metadata->global_depth++;
-    metadata->catalog_size *= 2;
+
 }
 
 /**
