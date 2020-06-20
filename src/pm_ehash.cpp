@@ -106,41 +106,6 @@ void PmEHash::extendCatalog() {
 
 }
 
-/**
- * @description: 获得一个可用的数据页的新槽位供哈希桶使用，如果没有则先申请新的数据页
- * @param pm_address&: 新槽位的持久化文件地址，作为引用参数返回
- * @return: 新槽位的虚拟地址
- */
-void* PmEHash::getFreeSlot(pm_address& new_address) {
-
-}
-
-/**
- * @description: 申请新的数据页文件，并把所有新产生的空闲槽的地址放入free_list等数据结构中
- * @param NULL
- * @return: NULL
- */
-void PmEHash::allocNewPage() {
-
-}
-
-/**
- * @description: 读取旧数据文件重新载入哈希，恢复哈希关闭前的状态
- * @param NULL
- * @return: NULL
- */
-void PmEHash::recover() {
-
-}
-
-/**
- * @description: 重启时，将所有数据页进行内存映射，设置地址间的映射关系，空闲的和使用的槽位都需要设置 
- * @param NULL
- * @return: NULL
- */
-void PmEHash::mapAllPage() {
-
-}
 
 /**
  * @description: 删除PmEHash对象所有数据页，目录和元数据文件，主要供gtest使用。即清空所有可扩展哈希的文件数据，不止是内存上的
