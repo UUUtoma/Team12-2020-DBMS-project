@@ -4,18 +4,16 @@
 #include<cstdint>
 #include<queue>
 #include<map>
-#include<vector>
 #include"data_page.h"
 
-#define BUCKET_SLOT_NUM                     15
-#define DEFAULT_CATALOG_SIZE                16
-#define META_NAME                           "pm_ehash_metadata";
-#define CATALOG_NAME                        "pm_ehash_catalog";
-#define PM_EHASH_DIRECTORY                  "/mnt/pmemdir";        // add your own directory path to store the pm_ehash
+#define BUCKET_SLOT_NUM               15
+#define DEFAULT_CATALOG_SIZE      16
+#define META_NAME                                "pm_ehash_metadata"
+#define CATALOG_NAME                        "pm_ehash_catalog"
+#define PM_EHASH_DIRECTORY        "/mnt/pmemdir"        // add your own directory path to store the pm_ehash
 
 using std::queue;
 using std::map;
-using std::vector;
 
 /* 
 ---the physical address of data in NVM---
@@ -64,21 +62,19 @@ class PmEHash
 {
 private:
     
-    ehash_metadata*                                 metadata;                    // virtual address of metadata, mapping the metadata file
-    ehash_catalog*                                  catalog;                        // the catalog of hash
-    vector<data_page*>                              pages_vitual_addr;           // virtual address of data_pages, mapping the data_page file
+    ehash_metadata*                               metadata;                    // virtual address of metadata, mapping the metadata file
+    ehash_catalog                                      catalog;                        // the catalog of hash
 
-    queue<pm_bucket*>                               free_list;                      //all free slots in data pages to store buckets
+    queue<pm_bucket*>                         free_list;                      //all free slots in data pages to store buckets
     map<pm_bucket*, pm_address> vAddr2pmAddr;       // map virtual address to pm_address, used to find specific pm_address
     map<pm_address, pm_bucket*> pmAddr2vAddr;       // map pm_address to virtual address, used to find specific virtual address
-
+    
     uint64_t hashFunc(uint64_t key);
 
     pm_bucket* getFreeBucket(uint64_t key);
     pm_bucket* getNewBucket();
     void freeEmptyBucket(pm_bucket* bucket);
     kv* getFreeKvSlot(pm_bucket* bucket);
-    void freePageSlot(pm_bucket* bucket);
 
     void splitBucket(uint64_t bucket_id);
     void mergeBucket(uint64_t bucket_id);

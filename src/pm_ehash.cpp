@@ -1,4 +1,8 @@
-#include"pm_ehash.h"
+#include"../include/pm_ehash.h"
+#include <libpmem.h>
+#include <fstream>
+#include <string>
+
 
 /**
  * @description: construct a new instance of PmEHash in a default directory
@@ -6,15 +10,43 @@
  * @return: new instance of PmEHash
  */
 PmEHash::PmEHash() {
+	std::ifstream metadata_file(PM_EHASH_DIRECTORY META_NAME, std::ios::in);
+	std::ifstream catalog_file(PM_EHASH_DIRECTORY CATALOG_NAME, std::ios::in);
+	if (metadata_file.is_open() && catalog_file.is_open()) 
+		recover();
+	else {
+		int is_pmem;
+		size_t mapped_len;
+		metadata = (ehash_metadata *)pmem_map_file(PM_EHASH_DIRECTORY META_NAME, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
+		metadata->max_file_id = 1;
+		metadata->catalog_size = 0;
+		metadata->global_depth = 0;		
 
+		/*ehash_catalog* catalog_addr = &catalog;
+		catalog_addr = (ehash_catalog *)pmem_map_file(PM_EHASH_DIRECTORY CATALOG_NAME, sizeof(catalog), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
+		catalog.buckets_pm_address->fileId = 1;
+		catalog.buckets_pm_address->offset = 0;*/		
+	}
 }
 /**
  * @description: persist and munmap all data in NVM
- * @param NULL 
+ * @param NULL
  * @return: NULL
  */
 PmEHash::~PmEHash() {
+	int is_pmem = pmem_is_pmem(metadata, sizeof(ehash_metadata));
+	if (is_pmem)
+		pmem_persist(metadata, sizeof(ehash_metadata));
+	else
+		pmem_msync(metadata, sizeof(ehash_metadata));
+	pmem_unmap(metadata, sizeof(ehash_metadata));
 
+	/*is_pmem = pmem_is_pmem();
+	if (is_pmem)
+		pmem_persist(catalog_addr, mapped_len);
+	else
+		pmem_msync(catalog_addr, mapped_len);
+	pmem_unmap(catalog_addr, mapped_len);*/
 }
 
 /**
@@ -23,7 +55,15 @@ PmEHash::~PmEHash() {
  * @return: 0 = insert successfully, -1 = fail to insert(target data with same key exist)
  */
 int PmEHash::insert(kv new_kv_pair) {
-    return 1;
+	uint64_t temp_value;
+	if (search(new_kv_pair.key, temp_value) == 0)	return -1;
+	pm_bucket* bucket = getFreeBucket(new_kv_pair.key);
+	kv* freePlace = getFreeKvSlot(bucket);
+	*freePlace = new_kv_pair;
+	int index = freePlace - bucket.slot;
+	bucket->bitmap[index / 8] |= (1 << (BUCKET_SLOT_NUM - index - 1));
+	//persist(freePlace);
+	return 0;
 }
 
 /**
@@ -32,7 +72,20 @@ int PmEHash::insert(kv new_kv_pair) {
  * @return: 0 = removing successfully, -1 = fail to remove(target data doesn't exist)
  */
 int PmEHash::remove(uint64_t key) {
-    return 1;
+	uint64_t bucket_id = hashFunc(key);
+	pm_bucket** virtual_address = catalog.buckets_virtual_address;
+	pm_bucket bucket = *(virtual_address[bucket_id]);
+
+	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+		kv temp = bucket.slot[i];
+		if (temp.key == key) {
+			bucket->bitmap[i / 8] &= ~(1 << (BUCKET_SLOT_NUM - i - 1));
+			if (i == 0)
+				mergeBucket(bucket_id);
+			return 0;
+		}
+	}
+	return -1;
 }
 /**
  * @description: 更新现存的键值对的值
@@ -40,16 +93,40 @@ int PmEHash::remove(uint64_t key) {
  * @return: 0 = update successfully, -1 = fail to update(target data doesn't exist)
  */
 int PmEHash::update(kv kv_pair) {
-    return 1;
+	uint64_t bucket_id = hashFunc(kv_pair.key);
+	pm_bucket** virtual_address = catalog.buckets_virtual_address;
+	pm_bucket bucket = *(virtual_address[bucket_id]);
+
+	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+		kv temp = bucket.slot[i];
+		if (temp.key == kv_pair.key) {
+			(bucket.slot[i]).value = kv_pair.value;
+			return 0;
+		}
+	}
+	return -1;
 }
 /**
  * @description: 查找目标键值对数据，将返回值放在参数里的引用类型进行返回
  * @param uint64_t: 查询的目标键
  * @param uint64_t&: 查询成功后返回的目标值
- * @return: 0 = search successfully, -1 = fail to search(target data doesn't exist) 
+ * @return: 0 = search successfully, -1 = fail to search(target data doesn't exist)
  */
 int PmEHash::search(uint64_t key, uint64_t& return_val) {
-    return 1;
+	uint64_t bucket_id = hashFunc(key);
+	pm_bucket** virtual_address = catalog.buckets_virtual_address;
+	pm_bucket bucket = *(virtual_address[bucket_id]);
+
+	//??????
+	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+		//if slot empty	  break;
+		kv temp = bucket.slot[i];
+		if (temp.key == key) {
+			return_val = temp.value;
+			return 0;
+		}
+	}
+	return -1;
 }
 
 /**
@@ -63,7 +140,7 @@ uint64_t PmEHash::hashFunc(uint64_t key) {
 
 /**
  * @description: 获得供插入的空闲的桶，无空闲桶则先分裂桶然后再返回空闲的桶
- * @param uint64_t: 带插入的键
+ * @param uint64_t: 待插入的键
  * @return: 空闲桶的虚拟地址
  */
 pm_bucket* PmEHash::getFreeBucket(uint64_t key) {
@@ -94,7 +171,7 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
  * @return: NULL
  */
 void PmEHash::mergeBucket(uint64_t bucket_id) {
-    
+
 }
 
 /**
@@ -106,6 +183,41 @@ void PmEHash::extendCatalog() {
 
 }
 
+/**
+ * @description: 获得一个可用的数据页的新槽位供哈希桶使用，如果没有则先申请新的数据页
+ * @param pm_address&: 新槽位的持久化文件地址，作为引用参数返回
+ * @return: 新槽位的虚拟地址
+ */
+void* PmEHash::getFreeSlot(pm_address& new_address) {
+
+}
+
+/**
+ * @description: 申请新的数据页文件，并把所有新产生的空闲槽的地址放入free_list等数据结构中
+ * @param NULL
+ * @return: NULL
+ */
+void PmEHash::allocNewPage() {
+
+}
+
+/**
+ * @description: 读取旧数据文件重新载入哈希，恢复哈希关闭前的状态
+ * @param NULL
+ * @return: NULL
+ */
+void PmEHash::recover() {
+
+}
+
+/**
+ * @description: 重启时，将所有数据页进行内存映射，设置地址间的映射关系，空闲的和使用的槽位都需要设置
+ * @param NULL
+ * @return: NULL
+ */
+void PmEHash::mapAllPage() {
+
+}
 
 /**
  * @description: 删除PmEHash对象所有数据页，目录和元数据文件，主要供gtest使用。即清空所有可扩展哈希的文件数据，不止是内存上的
@@ -113,5 +225,8 @@ void PmEHash::extendCatalog() {
  * @return: NULL
  */
 void PmEHash::selfDestory() {
-
+	remove(PM_EHASH_DIRECTORY META_NAME);
+	remove(PM_EHASH_DIRECTORY CATALOG_NAME);
+	//remove 数据页
+	return;
 }
