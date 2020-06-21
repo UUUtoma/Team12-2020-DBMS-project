@@ -1,10 +1,12 @@
 #ifndef _PM_E_HASH_H
 #define _PM_E_HASH_H
-
+#include <iostream>
 #include<cstdint>
 #include<queue>
 #include<map>
+#include<vector>
 #include"data_page.h"
+using namespace std;
 
 #define BUCKET_SLOT_NUM               15
 #define DEFAULT_CATALOG_SIZE      16
@@ -64,6 +66,7 @@ private:
     
     ehash_metadata*                               metadata;                    // virtual address of metadata, mapping the metadata file
     ehash_catalog                                      catalog;                        // the catalog of hash
+    vector<data_page*>                              pages_vitual_addr;                      // virtual address of data_pages, mapping the data_page file
 
     queue<pm_bucket*>                         free_list;                      //all free slots in data pages to store buckets
     map<pm_bucket*, pm_address> vAddr2pmAddr;       // map virtual address to pm_address, used to find specific pm_address
@@ -75,6 +78,7 @@ private:
     pm_bucket* getNewBucket();
     void freeEmptyBucket(pm_bucket* bucket);
     kv* getFreeKvSlot(pm_bucket* bucket);
+    void freePageSlot(pm_bucket* bucket);
 
     void splitBucket(uint64_t bucket_id);
     void mergeBucket(uint64_t bucket_id);
