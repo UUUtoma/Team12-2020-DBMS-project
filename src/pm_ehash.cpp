@@ -333,5 +333,8 @@ void PmEHash::extendCatalog() {
  * @return: NULL
  */
 void PmEHash::selfDestory() {
-
+	char command_line[256];
+	sprintf(command_line, "rm -f %s/*", PM_EHASH_DIRECTORY);
+	system(command_line);
+	return;
 }
