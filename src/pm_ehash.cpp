@@ -148,7 +148,7 @@ uint64_t PmEHash::hashFunc(uint64_t key) {
 
 /**
  * @description: 获得供插入的空闲的桶，无空闲桶则先分裂桶然后再返回空闲的桶
- * @param uint64_t: 带插入的键
+ * @param uint64_t: 待插入的键
  * @return: 空闲桶的虚拟地址
  */
 pm_bucket* PmEHash::getFreeBucket(uint64_t key) {
