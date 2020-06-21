@@ -4,16 +4,18 @@
 #include<cstdint>
 #include<queue>
 #include<map>
+#include<cmath>
 #include"data_page.h"
 
-#define BUCKET_SLOT_NUM               15
-#define DEFAULT_CATALOG_SIZE      16
-#define META_NAME                                "pm_ehash_metadata";
-#define CATALOG_NAME                        "pm_ehash_catalog";
-#define PM_EHASH_DIRECTORY        "";        // add your own directory path to store the pm_ehash
+#define BUCKET_SLOT_NUM  15
+#define DEFAULT_CATALOG_SIZE 16
+#define META_NAME "pm_ehash_metadata";
+#define CATALOG_NAME "pm_ehash_catalog";
+#define PM_EHASH_DIRECTORY "";        // add your own directory path to store the pm_ehash
 
 using std::queue;
 using std::map;
+using std::make_pair;
 
 /* 
 ---the physical address of data in NVM---

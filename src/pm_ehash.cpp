@@ -1,6 +1,6 @@
 #include"pm_ehash.h"
 #include"data_page.h"
-#include <cmath>
+using std::make_pair;
 /**
  * @description: construct a new instance of PmEHash in a default directory
  * @param NULL
@@ -161,8 +161,8 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
         }
     }
     //在map中插入新的实地址、虚地址关系，便于查找
-    pmAddr2vAddr.insert(std::make_pair(new_pm_addr,bu));
-    vAddr2pmAddr.insert(std::make_pair(bu,new_pm_addr));
+    pmAddr2vAddr.insert(make_pair(new_pm_addr,bu));
+    vAddr2pmAddr.insert(make_pair(bu,new_pm_addr));
 }
 
 /**
