@@ -5,7 +5,6 @@
 #include<queue>
 #include<map>
 #include<cmath>
-#include"data_page.h"
 
 #define BUCKET_SLOT_NUM  15
 #define DEFAULT_CATALOG_SIZE 16
@@ -26,6 +25,12 @@ typedef struct pm_address
 {
     uint32_t fileId;
     uint32_t offset;
+    bool operator <(const pm_address &other) const
+    {
+        if (fileId < other.fileId) return true;
+        if (fileId == other.fileId && offset < other.offset) return true;
+        else return true;
+    }
 } pm_address;
 
 /*
@@ -59,6 +64,8 @@ typedef struct ehash_metadata
     uint64_t catalog_size;     // the catalog size of catalog file(amount of data entry)
     uint64_t global_depth;   // global depth of PmEHash
 } ehash_metadata;
+
+#include"data_page.h"
 
 class PmEHash
 {
