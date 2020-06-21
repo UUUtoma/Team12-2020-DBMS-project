@@ -1,6 +1,11 @@
+#include <libpmem.h>
+#include <fstream>
+#include <string>
+
 #include"pm_ehash.h"
 #include"data_page.h"
 using std::make_pair;
+using std::string;
 /**
  * @description: construct a new instance of PmEHash in a default directory
  * @param NULL
@@ -8,6 +13,25 @@ using std::make_pair;
  */
 PmEHash::PmEHash() {
 
+    string metadata_path = PM_EHASH_DIRECTORY + '/' + META_NAME;
+    string catalog_path = PM_EHASH_DIRECTORY + '/' + CATALOG_NAME;
+	std::ifstream metadata_file(metadata_path, std::ios::in);
+	std::ifstream catalog_file(catalog_path, std::ios::in);
+	if (metadata_file.is_open() && catalog_file.is_open()) 
+		recover();
+	else {
+		int is_pmem;
+		size_t mapped_len;
+		metadata = (ehash_metadata*)pmem_map_file(metadata_path.c_str(), sizeof(ehash_metadata), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
+		metadata->max_file_id = 1;
+		metadata->catalog_size = 0;
+		metadata->global_depth = 0;		
+		
+		catalog->buckets_pm_address = (pm_address*)pmem_map_file(catalog_path.c_str(), sizeof(catalog), PMEM_FILE_CREATE, 0666, &mapped_len, &is_pmem);
+		// (catalog->buckets_pm_address)->fileId = 1;
+		// (catalog->buckets_pm_address)->offset = 0;
+		//buckets_virtual_address ??	
+	}
 }
 /**
  * @description: persist and munmap all data in NVM
@@ -15,7 +39,19 @@ PmEHash::PmEHash() {
  * @return: NULL
  */
 PmEHash::~PmEHash() {
+	int is_pmem = pmem_is_pmem(metadata, sizeof(ehash_metadata));
+	if (is_pmem)
+		pmem_persist(metadata, sizeof(ehash_metadata));
+	else
+		pmem_msync(metadata, sizeof(ehash_metadata));
+	pmem_unmap(metadata, sizeof(ehash_metadata));
 
+	is_pmem = pmem_is_pmem(catalog->buckets_pm_address, sizeof(catalog->buckets_pm_address) * metadata->catalog_size);
+	if (is_pmem)
+		pmem_persist(catalog->buckets_pm_address, sizeof(catalog->buckets_pm_address) * metadata->catalog_size);
+	else
+		pmem_msync(catalog->buckets_pm_address, sizeof(catalog->buckets_pm_address) * metadata->catalog_size);
+	pmem_unmap(catalog->buckets_pm_address, sizeof(catalog->buckets_pm_address) * metadata->catalog_size);
 }
 
 /**
@@ -24,16 +60,38 @@ PmEHash::~PmEHash() {
  * @return: 0 = insert successfully, -1 = fail to insert(target data with same key exist)
  */
 int PmEHash::insert(kv new_kv_pair) {
-    return 1;
+	uint64_t temp_value;
+	if (search(new_kv_pair.key, temp_value) == 0)	return -1;
+	pm_bucket* bucket = getFreeBucket(new_kv_pair.key);
+	kv* freePlace = getFreeKvSlot(bucket);
+	*freePlace = new_kv_pair;
+	int index = freePlace - bucket->slot;
+	bucket->bitmap[index / 8] |= (1 << (BUCKET_SLOT_NUM - index - 1));
+	//persist(freePlace);
+	return 0;
 }
 
-/**
+/** 
  * @description: 删除具有目标键的键值对数据，不直接将数据置0，而是将相应位图置0即可
  * @param uint64_t: 要删除的目标键值对的键
  * @return: 0 = removing successfully, -1 = fail to remove(target data doesn't exist)
  */
 int PmEHash::remove(uint64_t key) {
-    return 1;
+	uint64_t bucket_id = hashFunc(key);
+	pm_bucket** virtual_address = catalog->buckets_virtual_address;
+	pm_bucket bucket = *(virtual_address[bucket_id]);
+
+	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+		kv* temp = bucket.slot + i;
+		if (temp == NULL)	break;
+		if ((*temp).key == key) {
+			bucket.bitmap[i / 8] &= ~(1 << (BUCKET_SLOT_NUM - i - 1));
+			if (i == 0)
+				mergeBucket(bucket_id);
+			return 0;
+		}
+	}
+	return -1;
 }
 /**
  * @description: 更新现存的键值对的值
@@ -41,7 +99,19 @@ int PmEHash::remove(uint64_t key) {
  * @return: 0 = update successfully, -1 = fail to update(target data doesn't exist)
  */
 int PmEHash::update(kv kv_pair) {
-    return 1;
+	uint64_t bucket_id = hashFunc(kv_pair.key);
+	pm_bucket** virtual_address = catalog->buckets_virtual_address;
+	pm_bucket bucket = *(virtual_address[bucket_id]);
+
+	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+		kv* temp = bucket.slot + i;
+		if (temp == NULL)	break;
+		if ((*temp).key == kv_pair.key) {
+			(bucket.slot[i]).value = kv_pair.value;
+			return 0;
+		}
+	}
+	return -1;
 }
 /**
  * @description: 查找目标键值对数据，将返回值放在参数里的引用类型进行返回
@@ -50,7 +120,19 @@ int PmEHash::update(kv kv_pair) {
  * @return: 0 = search successfully, -1 = fail to search(target data doesn't exist) 
  */
 int PmEHash::search(uint64_t key, uint64_t& return_val) {
-    return 1;
+	uint64_t bucket_id = hashFunc(key);
+	pm_bucket** virtual_address = catalog->buckets_virtual_address;
+	pm_bucket bucket = *(virtual_address[bucket_id]);
+
+	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+		kv* temp = bucket.slot + i;
+		if (temp == NULL)	break;
+		if ((*temp).key == key) {
+			return_val = (*temp).value;
+			return 0;
+		}
+	}
+	return -1;
 }
 
 /**
@@ -71,14 +153,14 @@ uint64_t PmEHash::hashFunc(uint64_t key) {
  */
 pm_bucket* PmEHash::getFreeBucket(uint64_t key) {
     uint64_t hash_value = hashFunc(key);
-    pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[hash_value])->second;
+    pm_bucket* bu = pmAddr2vAddr.find(catalog->buckets_pm_address[hash_value])->second;
     //判断桶中是否有空闲slot，如果没有，分裂桶并且重新计算桶号
     kv* free_slot = getFreeKvSlot(bu);
     if(free_slot == NULL){
         splitBucket(hash_value);
         hash_value = hashFunc(key);
     } 
-    return pmAddr2vAddr.find(catalog.buckets_pm_address[hash_value])->second;
+    return pmAddr2vAddr.find(catalog->buckets_pm_address[hash_value])->second;
 }
 
 /**
@@ -108,7 +190,7 @@ kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
  */
 void PmEHash::splitBucket(uint64_t bucket_id) {
 //产生新的桶
-    pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
+    pm_bucket* bu = pmAddr2vAddr.find(catalog->buckets_pm_address[bucket_id])->second;
     //被分裂的桶local depth加一
     bu->local_depth++;
     //当global depth小于local depth的时候，需要倍增目录
@@ -121,12 +203,12 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
     pm_address new_pm_addr;
     //判断当前数据页是否满，由于一个数据页有16个slot，因此若catalog中最后一个pm_address的偏移量为120，则当前页为满。
     //fileId为下一个数据页，偏移量为0；否则为当前数据页，偏移量递增。
-    if(catalog.buckets_pm_address[metadata->catalog_size].offset == 120){
+    if(catalog->buckets_pm_address[metadata->catalog_size].offset == 120){
         new_pm_addr.offset = 0;
         new_pm_addr.fileId = metadata->max_file_id;
     }
     else{
-        new_pm_addr.offset = catalog.buckets_pm_address[metadata->catalog_size].offset + 8;
+        new_pm_addr.offset = catalog->buckets_pm_address[metadata->catalog_size].offset + 8;
         new_pm_addr.fileId = metadata->max_file_id - 1;
     }  
 
@@ -154,8 +236,8 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
 
             //桶号在[(i + j) / 2, j)之间的catalog设置新的内容
             for(int k = i + pow(2,metadata->global_depth - bu->local_depth); k < j; k++){
-                catalog.buckets_pm_address[k] = new_pm_addr;
-                catalog.buckets_virtual_address[k] = *free_slot;
+                catalog->buckets_pm_address[k] = new_pm_addr;
+                catalog->buckets_virtual_address[k] = *free_slot;
             }
             break;
         }
@@ -171,15 +253,16 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
  * @return: NULL
  */
 void PmEHash::mergeBucket(uint64_t bucket_id) {
-    pm_address addr = catalog.buckets_pm_address[bucket_id];
+
+    pm_address addr = catalog->buckets_pm_address[bucket_id];
     pm_bucket* vir_addr = pmAddr2vAddr.find(addr)->second;
     //删除map中需要合并的桶的实地址、虚地址关系
     pmAddr2vAddr.erase(addr);
     vAddr2pmAddr.erase(vir_addr);
     //释放桶的地址空间，设置数据页位图，将空出来的slot加入free_list
-    delete(catalog.buckets_virtual_address[bucket_id]);
-    freePageSlot(catalog.buckets_virtual_address[bucket_id]);
-    free_list.push(catalog.buckets_virtual_address[bucket_id]);
+    delete(catalog->buckets_virtual_address[bucket_id]);
+    freePageSlot(catalog->buckets_virtual_address[bucket_id]);
+    free_list.push(catalog->buckets_virtual_address[bucket_id]);
 
     //将要与该桶合并的桶的实地址、虚地址
     pm_bucket* origin_vir_addr;
@@ -191,23 +274,23 @@ void PmEHash::mergeBucket(uint64_t bucket_id) {
             //如果bucket_id在[i, (i + j) / 2)中，则这个区间的实地址、虚地址更改为下半区间对应桶的地址
             if(bucket_id < i + pow(2,  metadata->global_depth - vir_addr->local_depth)){
                 //随意取下半区间的一组地址，因为都相同
-                origin_addr = catalog.buckets_pm_address[j - 1];
+                origin_addr = catalog->buckets_pm_address[j - 1];
                 origin_vir_addr = pmAddr2vAddr.find(origin_addr)->second;
                 //循环更改上半区间地址
                 for(int k = i + pow(2,metadata->global_depth - vir_addr->local_depth); k < j; k++){
-                    catalog.buckets_pm_address[k] = origin_addr;
-                    catalog.buckets_virtual_address[k] = origin_vir_addr; 
+                    catalog->buckets_pm_address[k] = origin_addr;
+                    catalog->buckets_virtual_address[k] = origin_vir_addr; 
                 }
             }
             //如果bucket_id在下半区间，则这个区间的实地址、虚地址更改为上半区间对应桶的地址
             else{
                 //随意取上半区间的一组地址
-                origin_addr = catalog.buckets_pm_address[i];
+                origin_addr = catalog->buckets_pm_address[i];
                 origin_vir_addr = pmAddr2vAddr.find(origin_addr)->second;
                 //循环更改下半区间地址
                 for(int k = i ; k < i + pow(2,metadata->global_depth - vir_addr->local_depth); k++){
-                    catalog.buckets_pm_address[k] = origin_addr;
-                    catalog.buckets_virtual_address[k] = origin_vir_addr; 
+                    catalog->buckets_pm_address[k] = origin_addr;
+                    catalog->buckets_virtual_address[k] = origin_vir_addr; 
                 }
             }
             break;
@@ -226,16 +309,16 @@ void PmEHash::extendCatalog() {
     ehash_catalog* new_catalog;
     //循环复制旧目录中的值，桶号i * 2和i * 2 + 1对应的地址相同
     for(int i = 0; i < metadata->catalog_size; i++){
-        new_catalog->buckets_pm_address[i * 2] = catalog.buckets_pm_address[i];
-        new_catalog->buckets_pm_address[i * 2 + 1] = catalog.buckets_pm_address[i];
-        new_catalog->buckets_virtual_address[i * 2] = catalog.buckets_virtual_address[i];
-        new_catalog->buckets_virtual_address[i * 2 + 1] = catalog.buckets_virtual_address[i];
+        new_catalog->buckets_pm_address[i * 2] = catalog->buckets_pm_address[i];
+        new_catalog->buckets_pm_address[i * 2 + 1] = catalog->buckets_pm_address[i];
+        new_catalog->buckets_virtual_address[i * 2] = catalog->buckets_virtual_address[i];
+        new_catalog->buckets_virtual_address[i * 2 + 1] = catalog->buckets_virtual_address[i];
     }
     //回收旧的目录文件的空间
-    delete(catalog.buckets_pm_address);
-    delete(catalog.buckets_virtual_address);
+    delete(catalog->buckets_pm_address);
+    delete(catalog->buckets_virtual_address);
     //将新的目录文件赋给catalog
-    catalog = *new_catalog;
+    catalog = new_catalog;
     //回收作为中转的新目录文件
     delete(new_catalog);
     //目录倍增后global depth需要加一，catalog size要倍增
@@ -243,41 +326,6 @@ void PmEHash::extendCatalog() {
     metadata->catalog_size *= 2;
 }
 
-/**
- * @description: 获得一个可用的数据页的新槽位供哈希桶使用，如果没有则先申请新的数据页
- * @param pm_address&: 新槽位的持久化文件地址，作为引用参数返回
- * @return: 新槽位的虚拟地址
- */
-void* PmEHash::getFreeSlot(pm_address& new_address) {
-
-}
-
-/**
- * @description: 申请新的数据页文件，并把所有新产生的空闲槽的地址放入free_list等数据结构中
- * @param NULL
- * @return: NULL
- */
-void PmEHash::allocNewPage() {
-
-}
-
-/**
- * @description: 读取旧数据文件重新载入哈希，恢复哈希关闭前的状态
- * @param NULL
- * @return: NULL
- */
-void PmEHash::recover() {
-
-}
-
-/**
- * @description: 重启时，将所有数据页进行内存映射，设置地址间的映射关系，空闲的和使用的槽位都需要设置 
- * @param NULL
- * @return: NULL
- */
-void PmEHash::mapAllPage() {
-
-}
 
 /**
  * @description: 删除PmEHash对象所有数据页，目录和元数据文件，主要供gtest使用。即清空所有可扩展哈希的文件数据，不止是内存上的
