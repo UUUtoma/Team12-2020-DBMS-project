@@ -65,7 +65,8 @@ void PmEHash::recover() {
 	path_ss.str("");
 	path_ss << PM_EHASH_DIRECTORY;
 	path_ss << "/" << CATALOG_NAME;
-	catalog = (ehash_catalog*)pmem_map_file(path_ss.str().c_str(), sizeof(ehash_catalog), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
+	catalog.buckets_pm_address = (pm_address*)pmem_map_file(path_ss.str().c_str(), sizeof(ehash_catalog), PMEM_FILE_CREATE, 0666, &map_len, &is_pmem);
+	//catalog = (ehash_catalog*)pmem_map_file(path_ss.str().c_str(), sizeof(ehash_catalog), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
  	// 读取所有数据页文件并内存映射
  	// 设置可扩展哈希的桶的虚拟地址指针
  	mapAllPage();
@@ -80,8 +81,8 @@ void PmEHash::recover() {
  */
 void PmEHash::mapAllPage() {
 	uint64_t catalog_size = metadata->catalog_size;
-	pm_address* b_pm_addr = catalog->buckets_pm_address;
-	pm_bucket** b_v_addr = catalog->buckets_virtual_address;
+	pm_address* b_pm_addr = catalog.buckets_pm_address;
+	pm_bucket** b_v_addr = catalog.buckets_virtual_address;
 	pages_vitual_addr.resize(metadata->max_file_id); // virtual address of all data_page
 	bool page_has_map[metadata->max_file_id];
  	int i;
@@ -95,7 +96,8 @@ void PmEHash::mapAllPage() {
 			size_t map_len;
 			int is_pmem;
 			stringstream path_ss;
-			path_ss << fid;
+			path_ss << PM_EHASH_DIRECTORY;
+			path_ss << "/" << fid;
     		pages_vitual_addr[fid] = (data_page*)pmem_map_file(path_ss.str().c_str(), sizeof(data_page), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
     		page_has_map[fid] = true;
     		// 初始化free_list

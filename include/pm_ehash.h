@@ -8,9 +8,9 @@
 
 #define BUCKET_SLOT_NUM                     15
 #define DEFAULT_CATALOG_SIZE                16
-#define META_NAME                           "pm_ehash_metadata";
-#define CATALOG_NAME                        "pm_ehash_catalog";
-#define PM_EHASH_DIRECTORY                  "/mnt/pmemdir";        // add your own directory path to store the pm_ehash
+#define META_NAME                           "pm_ehash_metadata"
+#define CATALOG_NAME                        "pm_ehash_catalog"
+#define PM_EHASH_DIRECTORY                  "/mnt/pmemdir"        // add your own directory path to store the pm_ehash
 using std::queue;
 using std::map;
 using std::make_pair;
@@ -72,7 +72,7 @@ class PmEHash
 private:
     
     ehash_metadata*                                 metadata;                    // virtual address of metadata, mapping the metadata file
-    ehash_catalog*                                  catalog;                        // the catalog of hash
+    ehash_catalog                                   catalog;                        // the catalog of hash
     vector<data_page*>                              pages_vitual_addr;           // virtual address of data_pages, mapping the data_page file
 
     queue<pm_bucket*>                               free_list;                      //all free slots in data pages to store buckets
