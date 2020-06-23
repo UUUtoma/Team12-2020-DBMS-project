@@ -21,9 +21,9 @@ PmEHash::PmEHash() {
 	std::ifstream metadata_file(metadata_path, std::ios::in);
 	std::ifstream catalog_file(catalog_path, std::ios::in);
 
-	if (metadata_file.is_open() && catalog_file.is_open()) 
-		recover();
-	else {
+	//if (metadata_file.is_open() && catalog_file.is_open()) 
+	//	recover();
+	//else {
 		int is_pmem;
 		size_t mapped_len;
 
@@ -40,11 +40,11 @@ PmEHash::PmEHash() {
 		data_page* new_page = (data_page*)pmem_map_file(metadata_path, sizeof(data_page), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
 		for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i){
 			new_page->slots[i].local_depth = 4;
-			memset(new_page->slots[i].bitmap, 0, sizeof new_page->slots[0].bitmap);/**/
+			memset(new_page->slots[i].bitmap, 0, sizeof new_page->slots[0].bitmap);////
 			//bitmap all 0 by default ?
 		}		
 		pmem_persist(new_page, mapped_len);
-		pmem_unmap(new_page, mapped_len);/**/
+		pmem_unmap(new_page, mapped_len);////
 		//new_page->bitmap = 0x0000;
 		//new_page->bitmap.set(DATA_PAGE_SLOT_NUM);//or no argument
 
@@ -53,7 +53,7 @@ PmEHash::PmEHash() {
 		catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(pm_address)*DEFAULT_CATALOG_SIZE, PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
 		for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
 			catalog.buckets_pm_address[i].fileId = 1;
-			catalog.buckets_pm_address[i].offset = i*16;
+			catalog.buckets_pm_address[i].offset = i*8;
 		}
 
 
@@ -69,7 +69,7 @@ PmEHash::PmEHash() {
 		}
 		//catalog.buckets_virtual_address = new_bucket;
 
-	}
+	//}
 }
 /**
  * @description: persist and munmap all data in NVM
