@@ -36,7 +36,7 @@ void PmEHash::allocNewPage() {
 	size_t map_len;
 	int is_pmem;
 	stringstream ss;
-	ss << "data/" << metadata->max_file_id;
+	ss << PM_EHASH_DIRECTORY << "/" << metadata->max_file_id;
 	data_page* new_page = (data_page*)pmem_map_file(ss.str().c_str(), sizeof(data_page), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
 	pmem_persist(new_page, map_len);
 	pmem_unmap(new_page, map_len);
