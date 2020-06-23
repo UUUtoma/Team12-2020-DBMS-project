@@ -228,16 +228,6 @@ kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
  * @return: NULL
  */
 void PmEHash::splitBucket(uint64_t bucket_id) {
-//产生新的桶
-    pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
-    //被分裂的桶local depth加一
-    bu->local_depth++;
-    //当global depth小于local depth的时候，需要倍增目录
-    if(bu->local_depth > metadata->global_depth) extendCatalog();
-    //新桶的local depth与被分裂的桶相同
-    pm_bucket* new_bu;
-    new_bu->local_depth = bu->local_depth;
-
 //产生对应新桶的pm_address
     pm_address new_pm_addr;
     //判断当前数据页是否满，由于一个数据页有16个slot，因此若catalog中最后一个pm_address的偏移量为120，则当前页为满。
@@ -249,7 +239,21 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
     else{
         new_pm_addr.offset = catalog.buckets_pm_address[metadata->catalog_size].offset + 8;
         new_pm_addr.fileId = metadata->max_file_id - 1;
-    }  
+    }
+
+    //设置数据页空闲slot
+    pm_bucket** free_slot = (pm_bucket**)getFreeSlot(new_pm_addr);
+    pm_bucket* new_bu = *free_slot;
+
+//产生新的桶
+    pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
+    //被分裂的桶local depth加一
+    bu->local_depth++;
+    //当global depth小于local depth的时候，需要倍增目录
+    if(bu->local_depth > metadata->global_depth) extendCatalog();
+    //新桶的local depth与被分裂的桶相同
+    new_bu->local_depth = bu->local_depth;
+
 
 //将桶中满足要求的数据放入新的桶中，为新的桶设置catalog。其中序号为桶所在区间的后半区间的catalog指向新桶。
     //使用循环，寻找bucket_id所在区间
@@ -268,10 +272,6 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
                     new_bu->bitmap[m / 8] ^= (new_bu->bitmap[m / 8] & (1 << (m % 8))) ^ (1 << (m % 8)); 
                 }
             }
-
-            //设置数据页空闲slot
-            pm_bucket** free_slot = (pm_bucket**)getFreeSlot(new_pm_addr);
-            free_slot = &new_bu;
 
             //桶号在[(i + j) / 2, j)之间的catalog设置新的内容
             for(int k = i + pow(2,metadata->global_depth - bu->local_depth); k < j; k++){
