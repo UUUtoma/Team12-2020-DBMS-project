@@ -36,8 +36,8 @@ PmEHash::PmEHash() {
 
 		//new data_page
 		char page_path[256];
-		sprintf(metadata_path, "%s/0", PM_EHASH_DIRECTORY);
-		data_page* new_page = (data_page*)pmem_map_file(metadata_path, sizeof(data_page), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
+		sprintf(page_path, "%s/1", PM_EHASH_DIRECTORY);
+		data_page* new_page = (data_page*)pmem_map_file(page_path, sizeof(data_page), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
 		for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i){
 			new_page->slots[i].local_depth = 4;
 			memset(new_page->slots[i].bitmap, 0, sizeof new_page->slots[0].bitmap);////
@@ -53,7 +53,7 @@ PmEHash::PmEHash() {
 		catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(pm_address)*DEFAULT_CATALOG_SIZE, PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
 		for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
 			catalog.buckets_pm_address[i].fileId = 1;
-			catalog.buckets_pm_address[i].offset = i*8;
+			catalog.buckets_pm_address[i].offset = i * sizeof(pm_bucket);
 		}
 
 
@@ -158,7 +158,7 @@ int PmEHash::update(kv kv_pair) {
  * @return: 0 = search successfully, -1 = fail to search(target data doesn't exist) 
  */
 int PmEHash::search(uint64_t key, uint64_t& return_val) {
-	/*uint64_t bucket_id = hashFunc(key);
+	uint64_t bucket_id = hashFunc(key);
 	pm_bucket** virtual_address = catalog.buckets_virtual_address;
 	pm_bucket* bucket = virtual_address[bucket_id];
 	if (bucket == nullptr)	return -1;//
@@ -170,7 +170,7 @@ int PmEHash::search(uint64_t key, uint64_t& return_val) {
 			return_val = (*temp).value;
 			return 0;
 		}
-	}*/
+	}
 	return -1;
 }
 
@@ -181,7 +181,7 @@ int PmEHash::search(uint64_t key, uint64_t& return_val) {
  */
 uint64_t PmEHash::hashFunc(uint64_t key) {
     //直接取模求桶号
-    uint64_t hash_value = key % metadata->catalog_size;
+    uint64_t hash_value = key % (metadata->catalog_size);
     return hash_value;
 }
 
@@ -210,14 +210,14 @@ pm_bucket* PmEHash::getFreeBucket(uint64_t key) {
 kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
     kv* freekv = NULL;
     //遍历位图数组，对每个uint8_t类型数值遍历查看每一位是否为0（表示空闲），找到相应空闲位置并返回
-    /*for(int i = 0; i < BUCKET_SLOT_NUM / 8 + 1; i++){
+    for(int i = 0; i < BUCKET_SLOT_NUM / 8 + 1; i++){
         for(int j = 0; j < 8; j++){
             if((((bucket->bitmap[i]) & (1 << j)) >> j) == 0){
                 freekv = &(bucket->slot[j + i * 8]);
                 return freekv;
             }
         }
-    }*/
+    }
     //若没有空闲位置，返回空指针
     return freekv;
 }
@@ -232,7 +232,7 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
     pm_address new_pm_addr;
     //判断当前数据页是否满，由于一个数据页有16个slot，因此若catalog中最后一个pm_address的偏移量为120，则当前页为满。
     //fileId为下一个数据页，偏移量为0；否则为当前数据页，偏移量递增。
-    if(catalog.buckets_pm_address[metadata->catalog_size].offset == 120){
+    if(catalog.buckets_pm_address[metadata->catalog_size-1].offset == 120){
         new_pm_addr.offset = 0;
         new_pm_addr.fileId = metadata->max_file_id;
     }
