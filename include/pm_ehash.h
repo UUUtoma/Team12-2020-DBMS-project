@@ -47,6 +47,9 @@ typedef struct pm_bucket
     uint64_t local_depth;
     uint8_t  bitmap[BUCKET_SLOT_NUM / 8 + 1];      // one bit for each slot
     kv       slot[BUCKET_SLOT_NUM];                                // one slot for one kv-pair
+    pm_bucket() {
+        local_depth = 4;
+    }
 } pm_bucket;
 
 // in ehash_catalog, the virtual address of buckets_pm_address[n] is stored in buckets_virtual_address
@@ -73,7 +76,7 @@ private:
     
     ehash_metadata*                                 metadata;                    // virtual address of metadata, mapping the metadata file
     ehash_catalog                                   catalog;                        // the catalog of hash
-    vector<data_page*>                              pages_vitual_addr;           // virtual address of data_pages, mapping the data_page file
+    vector<data_page*>                              pages_virtual_addr;           // virtual address of data_pages, mapping the data_page file
 
     queue<pm_bucket*>                               free_list;                      //all free slots in data pages to store buckets
     map<pm_bucket*, pm_address> vAddr2pmAddr;       // map virtual address to pm_address, used to find specific pm_address
