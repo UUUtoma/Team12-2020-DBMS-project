@@ -104,7 +104,8 @@ int PmEHash::insert(kv new_kv_pair) {
 	kv* freePlace = getFreeKvSlot(bucket);
 	*freePlace = new_kv_pair;
 	int index = freePlace - bucket->slot;
-	bucket->bitmap[index / 8] |= (1 << (BUCKET_SLOT_NUM - index - 1));
+	//bucket->bitmap[index / 8] |= (1 << (BUCKET_SLOT_NUM - index - 1));
+    bucket->bitmap[index / 8] ^= (bucket->bitmap[index / 8] & (1 << (index % 8))) ^ (1 << (index % 8));
 	//persist(freePlace);
 	return 0;
 }
@@ -163,14 +164,22 @@ int PmEHash::search(uint64_t key, uint64_t& return_val) {
 	pm_bucket* bucket = virtual_address[bucket_id];
 	if (bucket == nullptr)	return -1;//
 
-	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+	/*for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
 		kv* temp = bucket->slot + i;
 		if (temp == nullptr)	break;
 		if ((*temp).key == key) {
 			return_val = (*temp).value;
 			return 0;
 		}
-	}
+	}*/
+    for(int i = 0; i < BUCKET_SLOT_NUM / 8 + 1; i++){
+        for(int j = 0; j < 8; j++){
+            if((((bucket->bitmap[i]) & (1 << j)) >> j) == 1 && bucket->slot[i * 8 + j].key == key){
+                return_val = bucket->slot[i * 8 + j].value;
+                return 0;
+            }
+        }
+    }
 	return -1;
 }
 

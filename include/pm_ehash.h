@@ -10,7 +10,7 @@
 #define DEFAULT_CATALOG_SIZE                16
 #define META_NAME                           "pm_ehash_metadata"
 #define CATALOG_NAME                        "pm_ehash_catalog"
-#define PM_EHASH_DIRECTORY                  "/home/sherry/Desktop/Team12-2020-DBMS-project/data"        // add your own directory path to store the pm_ehash
+#define PM_EHASH_DIRECTORY                  "/home/zhangyuying/Team12-2020-DBMS-project/data"        // add your own directory path to store the pm_ehash
 using std::queue;
 using std::map;
 using std::make_pair;
@@ -48,7 +48,7 @@ typedef struct pm_bucket
     uint8_t  bitmap[BUCKET_SLOT_NUM / 8 + 1];      // one bit for each slot
     kv       slot[BUCKET_SLOT_NUM];                                // one slot for one kv-pair
     pm_bucket() {
-        local_depth = 4;
+        local_depth = 1;
     }
 } pm_bucket;
 
