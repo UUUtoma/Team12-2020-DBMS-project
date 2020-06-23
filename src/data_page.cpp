@@ -38,18 +38,21 @@ void PmEHash::allocNewPage() {
 	stringstream ss;
 	ss << PM_EHASH_DIRECTORY << "/" << metadata->max_file_id;
 	data_page* new_page = (data_page*)pmem_map_file(ss.str().c_str(), sizeof(data_page), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
-	pmem_persist(new_page, map_len);
-	pmem_unmap(new_page, map_len);
 	// 更新 pages_virtual_addr
 	pages_virtual_addr.push_back(new_page);
 	// 产生新空桶, 更新 free_list, vAddr2pmAddr, pmAddr2vAddr
 	for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i) {
+		new_page->slots[i].local_depth = 1;
 		free_list.push(&(new_page->slots[i]));
 		pm_bucket* v_addr = &(pages_virtual_addr.back()->slots[i]);
 		pm_address pm_addr = {(uint32_t)metadata->max_file_id, (uint32_t)(i * sizeof(pm_bucket))};
 		vAddr2pmAddr.insert(make_pair(v_addr, pm_addr));
     	pmAddr2vAddr.insert(make_pair(pm_addr, v_addr));
 	}
+	pmem_persist(new_page, map_len);
+	// 若此时unmap，页虚地址失效，应该在析构函数unmap
+	// pmem_unmap(new_page, map_len);
+
 	// 更新 metadata
 	metadata->max_file_id++;
 	pmem_persist(metadata, sizeof(ehash_metadata));

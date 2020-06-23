@@ -35,16 +35,17 @@ PmEHash::PmEHash() {
 
 
 		//new data_page
-		char page_path[256];
-		sprintf(page_path, "%s/1", PM_EHASH_DIRECTORY);
-		data_page* new_page = (data_page*)pmem_map_file(page_path, sizeof(data_page), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
-		for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i){
-			new_page->slots[i].local_depth = 4;
-			memset(new_page->slots[i].bitmap, 0, sizeof new_page->slots[0].bitmap);////
-			//bitmap all 0 by default ?
-		}		
-		pmem_persist(new_page, mapped_len);
-		pmem_unmap(new_page, mapped_len);////
+        allocNewPage();
+		// char page_path[256];
+		// sprintf(page_path, "%s/1", PM_EHASH_DIRECTORY);
+		// data_page* new_page = (data_page*)pmem_map_file(page_path, sizeof(data_page), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
+		// for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i){
+		// 	new_page->slots[i].local_depth = 4;
+		// 	memset(new_page->slots[i].bitmap, 0, sizeof new_page->slots[0].bitmap);////
+		// 	//bitmap all 0 by default ?
+		// }		
+		// pmem_persist(new_page, mapped_len);
+		// pmem_unmap(new_page, mapped_len);////
 		//new_page->bitmap = 0x0000;
 		//new_page->bitmap.set(DATA_PAGE_SLOT_NUM);//or no argument
 
@@ -116,15 +117,19 @@ int PmEHash::insert(kv new_kv_pair) {
  * @return: 0 = removing successfully, -1 = fail to remove(target data doesn't exist)
  */
 int PmEHash::remove(uint64_t key) {
+    uint64_t ret_val;
+    if (search(key, ret_val) == -1) return -1;
 	uint64_t bucket_id = hashFunc(key);
 	pm_bucket** virtual_address = catalog.buckets_virtual_address;
-	pm_bucket bucket = *(virtual_address[bucket_id]);
+	// pm_bucket bucket = *(virtual_address[bucket_id]);
+    pm_bucket* bucket = virtual_address[bucket_id];
 
 	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
-		kv* temp = bucket.slot + i;
+		kv* temp = bucket->slot + i;
 		if (temp == NULL)	break;
 		if ((*temp).key == key) {
-			bucket.bitmap[i / 8] &= ~(1 << (BUCKET_SLOT_NUM - i - 1));
+			// bucket.bitmap[i / 8] &= ~(1 << (BUCKET_SLOT_NUM - i - 1));
+            bucket->bitmap[i / 8] ^= (bucket->bitmap[i / 8] & (1 << (i % 8))) ^ (0 << (i % 8));
 			if (i == 0)
 				mergeBucket(bucket_id);
 			return 0;
@@ -237,32 +242,44 @@ kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
  * @return: NULL
  */
 void PmEHash::splitBucket(uint64_t bucket_id) {
-//产生对应新桶的pm_address
-    pm_address new_pm_addr;
-    //判断当前数据页是否满，由于一个数据页有16个slot，因此若catalog中最后一个pm_address的偏移量为120，则当前页为满。
-    //fileId为下一个数据页，偏移量为0；否则为当前数据页，偏移量递增。
-    if(catalog.buckets_pm_address[metadata->catalog_size-1].offset == 120){
-        new_pm_addr.offset = 0;
-        new_pm_addr.fileId = metadata->max_file_id;
-    }
-    else{
-        new_pm_addr.offset = catalog.buckets_pm_address[metadata->catalog_size].offset + 8;
-        new_pm_addr.fileId = metadata->max_file_id - 1;
-    }
+// //产生对应新桶的pm_address
+//     pm_address new_pm_addr;
+//     //判断当前数据页是否满，由于一个数据页有16个slot，因此若catalog中最后一个pm_address的偏移量为120，则当前页为满。
+//     //fileId为下一个数据页，偏移量为0；否则为当前数据页，偏移量递增。
+//     if(catalog.buckets_pm_address[metadata->catalog_size-1].offset == 120){
+//         new_pm_addr.offset = 0;
+//         new_pm_addr.fileId = metadata->max_file_id;
+//     }
+//     else{
+//         new_pm_addr.offset = catalog.buckets_pm_address[metadata->catalog_size].offset + 8;
+//         new_pm_addr.fileId = metadata->max_file_id - 1;
+//     }
+
+//     //设置数据页空闲slot
+//     pm_bucket** free_slot = (pm_bucket**)getFreeSlot(new_pm_addr);
+//     pm_bucket* new_bu = *free_slot;
+
+// //产生新的桶
+//     pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
+//     //被分裂的桶local depth加一
+//     bu->local_depth++;
+//     //当global depth小于local depth的时候，需要倍增目录
+//     if(bu->local_depth > metadata->global_depth) extendCatalog();
+//     //新桶的local depth与被分裂的桶相同
+//     new_bu->local_depth = bu->local_depth;
 
     //设置数据页空闲slot
-    pm_bucket** free_slot = (pm_bucket**)getFreeSlot(new_pm_addr);
-    pm_bucket* new_bu = *free_slot;
+    pm_address new_pm_addr;
+    pm_bucket* new_bu = (pm_bucket*)getFreeSlot(new_pm_addr);
 
 //产生新的桶
-    pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
     //被分裂的桶local depth加一
+    pm_bucket* bu = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
     bu->local_depth++;
     //当global depth小于local depth的时候，需要倍增目录
     if(bu->local_depth > metadata->global_depth) extendCatalog();
     //新桶的local depth与被分裂的桶相同
     new_bu->local_depth = bu->local_depth;
-
 
 //将桶中满足要求的数据放入新的桶中，为新的桶设置catalog。其中序号为桶所在区间的后半区间的catalog指向新桶。
     //使用循环，寻找bucket_id所在区间
@@ -285,7 +302,7 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
             //桶号在[(i + j) / 2, j)之间的catalog设置新的内容
             for(int k = i + pow(2,metadata->global_depth - bu->local_depth); k < j; k++){
                 catalog.buckets_pm_address[k] = new_pm_addr;
-                catalog.buckets_virtual_address[k] = *free_slot;
+                catalog.buckets_virtual_address[k] = new_bu;
             }
             break;
         }
@@ -303,13 +320,17 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
 void PmEHash::mergeBucket(uint64_t bucket_id) {
     pm_address addr = catalog.buckets_pm_address[bucket_id];
     pm_bucket* vir_addr = pmAddr2vAddr.find(addr)->second;
+    
+    //释放桶的地址空间，设置数据页位图，将空出来的slot加入free_list
+    // delete(catalog.buckets_virtual_address[bucket_id]);
+    // freePageSlot(catalog.buckets_virtual_address[bucket_id]);
+    int slot_index = addr.offset / sizeof(pm_bucket);
+	pages_virtual_addr[addr.fileId]->bitmap[slot_index] = 0;
+    free_list.push(catalog.buckets_virtual_address[bucket_id]);
+
     //删除map中需要合并的桶的实地址、虚地址关系
     pmAddr2vAddr.erase(addr);
     vAddr2pmAddr.erase(vir_addr);
-    //释放桶的地址空间，设置数据页位图，将空出来的slot加入free_list
-    delete(catalog.buckets_virtual_address[bucket_id]);
-    freePageSlot(catalog.buckets_virtual_address[bucket_id]);
-    free_list.push(catalog.buckets_virtual_address[bucket_id]);
 
     //将要与该桶合并的桶的实地址、虚地址
     pm_bucket* origin_vir_addr;
