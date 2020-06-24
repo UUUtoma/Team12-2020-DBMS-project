@@ -177,8 +177,8 @@ int PmEHash::update(kv kv_pair) {
  */
 int PmEHash::search(uint64_t key, uint64_t& return_val) {
 	uint64_t bucket_id = hashFunc(key);
-	pm_bucket** virtual_address = catalog.buckets_virtual_address;
-	pm_bucket* bucket = virtual_address[bucket_id];
+	//pm_bucket** virtual_address = catalog.buckets_virtual_address;
+	pm_bucket* bucket = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
 	if (bucket == nullptr)	return -1;//
 
 	/*for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
@@ -387,7 +387,9 @@ void PmEHash::mergeBucket(uint64_t bucket_id) {
  * @return: NULL
  */
 void PmEHash::extendCatalog() {
-    ehash_catalog* new_catalog;
+    ehash_catalog* new_catalog = new ehash_catalog;
+    new_catalog->buckets_pm_address = (pm_address*)malloc(sizeof(*(catalog.buckets_pm_address)) * 2);
+    new_catalog->buckets_virtual_address = (pm_bucket**)malloc(sizeof(*(catalog.buckets_virtual_address)) * 2);
     //循环复制旧目录中的值，桶号i * 2和i * 2 + 1对应的地址相同
     for(int i = 0; i < metadata->catalog_size; i++){
         new_catalog->buckets_pm_address[i * 2] = catalog.buckets_pm_address[i];
@@ -396,12 +398,12 @@ void PmEHash::extendCatalog() {
         new_catalog->buckets_virtual_address[i * 2 + 1] = catalog.buckets_virtual_address[i];
     }
     //回收旧的目录文件的空间
-    delete(catalog.buckets_pm_address);
-    delete(catalog.buckets_virtual_address);
+    //delete(catalog.buckets_pm_address);
+    //delete(catalog.buckets_virtual_address);
     //将新的目录文件赋给catalog
     catalog = *new_catalog;
     //回收作为中转的新目录文件
-    delete(new_catalog);
+    //delete(new_catalog);
     //目录倍增后global depth需要加一，catalog size要倍增
     metadata->global_depth++;
     metadata->catalog_size *= 2;

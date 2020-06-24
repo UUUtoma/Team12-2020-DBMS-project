@@ -61,9 +61,12 @@ void load(PmEHash* ehash){
                 ehash->insert(new_kv);
                 ope[0]++;
             }
-            if(in.fail()) 
+            if(in.fail()){
+                cout << "1";
                 break;
+            }  
         }
+        cout  << "1";
         in.close();
     }
 }
