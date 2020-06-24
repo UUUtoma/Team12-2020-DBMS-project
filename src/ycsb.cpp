@@ -16,7 +16,7 @@ string run_file[] = {"1w-rw-50-50-run.txt","10w-rw-0-100-run.txt","10w-rw-25-75-
                     "220w-rw-50-50-run.txt"};
 //每个操作的数量，分别为insert、remove、update、read
 double ope[4] = {0};
-string dir = "../workloads/";
+string dir = "../../workloads/";
 
 /**
  * @description: 读入一行，返回包含的操作类型和kv
