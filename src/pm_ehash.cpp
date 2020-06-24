@@ -15,63 +15,47 @@ using namespace std;
  * @return: new instance of PmEHash
  */
 PmEHash::PmEHash() {
-    //Initialize paths
-	char metadata_path[256], catalog_path[256];
-	sprintf(metadata_path, "%s/%s", PM_EHASH_DIRECTORY, META_NAME);
-	sprintf(catalog_path, "%s/%s", PM_EHASH_DIRECTORY, CATALOG_NAME);
-	std::ifstream metadata_file(metadata_path, std::ios::in);
-	std::ifstream catalog_file(catalog_path, std::ios::in);
+    char metadata_path[256], catalog_path[256];
+    sprintf(metadata_path, "%s/%s", PM_EHASH_DIRECTORY, META_NAME);
+    sprintf(catalog_path, "%s/%s", PM_EHASH_DIRECTORY, CATALOG_NAME);
+    std::ifstream metadata_file(metadata_path, std::ios::in);
+    std::ifstream catalog_file(catalog_path, std::ios::in);
 
-	//if (metadata_file.is_open() && catalog_file.is_open()) 
-	//	recover();
-	//else {
-		int is_pmem;
-		size_t mapped_len;
+    int is_pmem;
+    size_t mapped_len;
+    metadata = (ehash_metadata*)pmem_map_file(metadata_path, sizeof(ehash_metadata), 0, 0, &mapped_len, &is_pmem);
+    catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(ehash_catalog), 0, 0, &mapped_len, &is_pmem);
+    
+    if (metadata == nullptr || catalog.buckets_pm_address == nullptr){
 
-		//new metadata
-		metadata = (ehash_metadata*)pmem_map_file(metadata_path, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
-		metadata->max_file_id = 1;
-		metadata->catalog_size = DEFAULT_CATALOG_SIZE;
-		metadata->global_depth = 4;
+        //new metadata
+        metadata = (ehash_metadata*)pmem_map_file(metadata_path, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
+        metadata->max_file_id = 1;
+        metadata->catalog_size = DEFAULT_CATALOG_SIZE;
+        metadata->global_depth = 4;
 
-
-		//new data_page
+        //new data_page
         allocNewPage();
-		// char page_path[256];
-		// sprintf(page_path, "%s/1", PM_EHASH_DIRECTORY);
-		// data_page* new_page = (data_page*)pmem_map_file(page_path, sizeof(data_page), PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
-		// for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i){
-		// 	new_page->slots[i].local_depth = 4;
-		// 	memset(new_page->slots[i].bitmap, 0, sizeof new_page->slots[0].bitmap);////
-		// 	//bitmap all 0 by default ?
-		// }		
-		// pmem_persist(new_page, mapped_len);
-		// pmem_unmap(new_page, mapped_len);////
-		//new_page->bitmap = 0x0000;
-		//new_page->bitmap.set(DATA_PAGE_SLOT_NUM);//or no argument
 
+        //new catalog.buckets_pm_address
+        catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(pm_address)*DEFAULT_CATALOG_SIZE, PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
+        for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
+            catalog.buckets_pm_address[i].fileId = 1;
+            catalog.buckets_pm_address[i].offset = i * sizeof(pm_bucket);
+        }
 
-		//new catalog.buckets_pm_address
-		catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(pm_address)*DEFAULT_CATALOG_SIZE, PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
-		for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
-			catalog.buckets_pm_address[i].fileId = 1;
-			catalog.buckets_pm_address[i].offset = i * sizeof(pm_bucket);
-		}
+        mapAllPage();
 
-
-		//mapAllPage()? to init catalog.buckets_virtual_address
-		mapAllPage();
-
-
-		//new catalog.buckets_virtual_address
-		//pm_bucket* new_bucket[DEFAULT_CATALOG_SIZE];
-		catalog.buckets_virtual_address = new pm_bucket*[DEFAULT_CATALOG_SIZE];
-		for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
-			catalog.buckets_virtual_address[i] = pmAddr2vAddr[catalog.buckets_pm_address[i]];
-		}
-		//catalog.buckets_virtual_address = new_bucket;
-
-	//}
+        //new catalog.buckets_virtual_address
+        //pm_bucket* new_bucket[DEFAULT_CATALOG_SIZE];
+        catalog.buckets_virtual_address = new pm_bucket*[DEFAULT_CATALOG_SIZE];
+        for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
+            catalog.buckets_virtual_address[i] = pmAddr2vAddr[catalog.buckets_pm_address[i]];
+        }
+        //catalog.buckets_virtual_address = new_bucket;
+    }
+    else 
+        recover();
 }
 /**
  * @description: persist and munmap all data in NVM
