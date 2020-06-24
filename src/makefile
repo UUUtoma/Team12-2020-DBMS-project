@@ -12,7 +12,7 @@ CXXFLAGS += -g -pthread -std=c++11
 ycsb: ycsb.o pm_ehash.o data_page.o 
 	${CXX} ${CXXFLAGS} $^ -lpmem -o $@
 
-%.o: %.cpp
+%.o: %.cpp 
 	${CXX} ${CXXFLAGS} -I ${USER_HEADER_DIR} -o $@ -c $^
 
 clean :

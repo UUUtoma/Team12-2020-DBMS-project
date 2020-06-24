@@ -4,6 +4,7 @@
 #include <ctime>
 #include <string>
 #include "pm_ehash.h"
+#include "data_page.h"
 using namespace std;
 
 //load、run文件
@@ -15,7 +16,7 @@ string run_file[] = {"1w-rw-50-50-run.txt","10w-rw-0-100-run.txt","10w-rw-25-75-
                     "220w-rw-50-50-run.txt"};
 //每个操作的数量，分别为insert、remove、update、read
 double ope[4] = {0};
-
+string dir = "../workloads/";
 
 /**
  * @description: 读入一行，返回包含的操作类型和kv
@@ -30,10 +31,10 @@ void get_info(string line, string& opera, kv& new_kv){
     istringstream ss(line);
     ss >> opera;
     ss >> temp;
-    istringstream is(temp.substr(0,8));
-    is >> key;
-    istringstream is(temp.substr(8,temp.length()));
-    is >> value;
+    istringstream a(temp.substr(0,8));
+    a >> key;
+    istringstream b(temp.substr(8,temp.length()));
+    b >> value;
     new_kv.key = key;
     new_kv.value = value;
 }
@@ -45,7 +46,7 @@ void get_info(string line, string& opera, kv& new_kv){
  */
 void load(PmEHash* ehash){
     for(int i = 0; i < load_file->length(); i++){
-        ifstream in(load_file[i]);
+        ifstream in(dir + load_file[i]);
         if(!in){
             cout << "error opening load file" << endl;
             return;
@@ -60,6 +61,8 @@ void load(PmEHash* ehash){
                 ehash->insert(new_kv);
                 ope[0]++;
             }
+            if(in.fail()) 
+                break;
         }
         in.close();
     }
@@ -72,7 +75,7 @@ void load(PmEHash* ehash){
  */
 void run(PmEHash* ehash){
     for(int i = 0; i < run_file->length(); i++){
-        ifstream in(run_file[i]);
+        ifstream in(dir + run_file[i]);
         if(!in){
             cout << "error opening run file" << endl;
             return;
@@ -100,12 +103,14 @@ void run(PmEHash* ehash){
                 ehash->remove(new_kv.key);
                 ope[1]++;
             }
+            if(in.fail()) 
+                break;
         }
         in.close();
     }
 }
 
-int mian(){
+int main(){
     double diff1, diff2;
     clock_t start, middle, end;
     PmEHash* ehash = new PmEHash;
@@ -130,4 +135,6 @@ int mian(){
     cout << "Update operation : " << ope[2] / total << endl;
     cout << "Read operation : " << ope[3] / total << endl;
     cout << "OPS : " << total / ((end - start) / CLOCKS_PER_SEC) << endl;
+
+    ehash->selfDestory();
 }
