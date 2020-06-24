@@ -387,9 +387,25 @@ void PmEHash::mergeBucket(uint64_t bucket_id) {
  * @return: NULL
  */
 void PmEHash::extendCatalog() {
-    ehash_catalog* new_catalog = new ehash_catalog;
-    new_catalog->buckets_pm_address = (pm_address*)malloc(sizeof(*(catalog.buckets_pm_address)) * 2);
-    new_catalog->buckets_virtual_address = (pm_bucket**)malloc(sizeof(*(catalog.buckets_virtual_address)) * 2);
+    metadata->global_depth++;
+    metadata->catalog_size *= 2;
+
+    uint64_t new_size = metadata->catalog_size * sizeof(pm_address);
+    char catalog_path[256];
+    sprintf(catalog_path, "%s/%s", PM_EHASH_DIRECTORY, CATALOG_NAME);
+    int is_pmem;
+    size_t mapped_len;
+    catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, new_size, PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
+    memcpy((void*)catalog.buckets_pm_address + new_size / 2, (void*)catalog.buckets_pm_address, new_size / 2);
+
+    pm_bucket **new_virtual_address = new pm_bucket*[metadata->catalog_size];
+    memcpy(new_virtual_address, catalog.buckets_virtual_address, sizeof(pm_bucket*) * metadata->catalog_size / 2);
+    memcpy(new_virtual_address + metadata->catalog_size / 2, catalog.buckets_virtual_address, sizeof(pm_bucket*) * metadata->catalog_size / 2);
+    delete[] catalog.buckets_virtual_address;
+    catalog.buckets_virtual_address = new_virtual_address;
+
+    /*
+    ehash_catalog* new_catalog;
     //循环复制旧目录中的值，桶号i * 2和i * 2 + 1对应的地址相同
     for(int i = 0; i < metadata->catalog_size; i++){
         new_catalog->buckets_pm_address[i * 2] = catalog.buckets_pm_address[i];
@@ -398,15 +414,16 @@ void PmEHash::extendCatalog() {
         new_catalog->buckets_virtual_address[i * 2 + 1] = catalog.buckets_virtual_address[i];
     }
     //回收旧的目录文件的空间
-    //delete(catalog.buckets_pm_address);
-    //delete(catalog.buckets_virtual_address);
+    delete(catalog.buckets_pm_address);
+    delete(catalog.buckets_virtual_address);
     //将新的目录文件赋给catalog
     catalog = *new_catalog;
     //回收作为中转的新目录文件
-    //delete(new_catalog);
+    delete(new_catalog);
     //目录倍增后global depth需要加一，catalog size要倍增
     metadata->global_depth++;
     metadata->catalog_size *= 2;
+    */
 }
 
 
