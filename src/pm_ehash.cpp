@@ -15,6 +15,7 @@ using namespace std;
  * @return: new instance of PmEHash
  */
 PmEHash::PmEHash() {
+    //Initialize paths
 	char metadata_path[256], catalog_path[256];
 	sprintf(metadata_path, "%s/%s", PM_EHASH_DIRECTORY, META_NAME);
 	sprintf(catalog_path, "%s/%s", PM_EHASH_DIRECTORY, CATALOG_NAME);
@@ -100,12 +101,14 @@ PmEHash::~PmEHash() {
  */
 int PmEHash::insert(kv new_kv_pair) {
 	uint64_t temp_value;
+    //限制条件：若已存在则返回
 	if (search(new_kv_pair.key, temp_value) == 0)	return -1;
 	pm_bucket* bucket = getFreeBucket(new_kv_pair.key);
 	kv* freePlace = getFreeKvSlot(bucket);
 	*freePlace = new_kv_pair;
 	int index = freePlace - bucket->slot;
 	//bucket->bitmap[index / 8] |= (1 << (BUCKET_SLOT_NUM - index - 1));
+    //设置位图为1
     bucket->bitmap[index / 8] ^= (bucket->bitmap[index / 8] & (1 << (index % 8))) ^ (1 << (index % 8));
 	//persist(freePlace);
 	return 0;
@@ -124,14 +127,23 @@ int PmEHash::remove(uint64_t key) {
 	// pm_bucket bucket = *(virtual_address[bucket_id]);
     pm_bucket* bucket = virtual_address[bucket_id];
 
+    //遍历bucket中的slot，查找符合条件的kv
 	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
 		kv* temp = bucket->slot + i;
 		if (temp == NULL)	break;
 		if ((*temp).key == key) {
-			// bucket.bitmap[i / 8] &= ~(1 << (BUCKET_SLOT_NUM - i - 1));
+			//设置位图为0
             bucket->bitmap[i / 8] ^= (bucket->bitmap[i / 8] & (1 << (i % 8))) ^ (0 << (i % 8));
-			if (i == 0)
-				mergeBucket(bucket_id);
+            //遍历检验位图，若都为0，则为空桶，执行mergeBucket()
+            int k, j;
+			for(k = 0; k < BUCKET_SLOT_NUM / 8 + 1; k++){
+                for(j = 0; j < 8; j++){
+                    if((((bucket->bitmap[k]) & (1 << j)) >> j) == 1)
+                        break;
+                }
+            }
+			if(k * 8 - j == BUCKET_SLOT_NUM) 
+                mergeBucket(bucket_id);
 			return 0;
 		}
 	}
@@ -177,6 +189,7 @@ int PmEHash::search(uint64_t key, uint64_t& return_val) {
 			return 0;
 		}
 	}*/
+    //循环遍历，若位图为1且key符合条件，则设置return_val且返回0
     for(int i = 0; i < BUCKET_SLOT_NUM / 8 + 1; i++){
         for(int j = 0; j < 8; j++){
             if((((bucket->bitmap[i]) & (1 << j)) >> j) == 1 && bucket->slot[i * 8 + j].key == key){
@@ -268,7 +281,7 @@ void PmEHash::splitBucket(uint64_t bucket_id) {
 //     //新桶的local depth与被分裂的桶相同
 //     new_bu->local_depth = bu->local_depth;
 
-    //设置数据页空闲slot
+//设置数据页空闲slot
     pm_address new_pm_addr;
     pm_bucket* new_bu = (pm_bucket*)getFreeSlot(new_pm_addr);
 

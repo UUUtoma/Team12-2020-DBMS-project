@@ -6,15 +6,24 @@
 #include "pm_ehash.h"
 using namespace std;
 
+//load、run文件
 string load_file[] = {"1w-rw-50-50-load.txt","10w-rw-0-100-load.txt","10w-rw-25-75-load.txt",
                     "10w-rw-50-50-load.txt","10w-rw-75-25-load.txt","10w-rw-100-0-load.txt",
                     "220w-rw-50-50-load.txt"};
 string run_file[] = {"1w-rw-50-50-run.txt","10w-rw-0-100-run.txt","10w-rw-25-75-run.txt",
                     "10w-rw-50-50-run.txt","10w-rw-75-25-run.txt","10w-rw-100-0-run.txt",
                     "220w-rw-50-50-run.txt"};
+//每个操作的数量，分别为insert、remove、update、read
 double ope[4] = {0};
 
 
+/**
+ * @description: 读入一行，返回包含的操作类型和kv
+ * @param string: 从文件读入的一行
+ * @param string&: 返回的操作类型
+ * @param kv&: 返回的new_kv键值对
+ * @return: NULL
+ */
 void get_info(string line, string& opera, kv& new_kv){
     string temp;
     uint64_t key, value;
@@ -29,6 +38,11 @@ void get_info(string line, string& opera, kv& new_kv){
     new_kv.value = value;
 }
 
+/**
+ * @description: 执行load阶段操作
+ * @param PmEHash*: PmEHash实例
+ * @return: NULL
+ */
 void load(PmEHash* ehash){
     for(int i = 0; i < load_file->length(); i++){
         ifstream in(load_file[i]);
@@ -39,6 +53,7 @@ void load(PmEHash* ehash){
 
         string line, opera;
         kv new_kv;
+        //对每一行执行get_info()并执行insert操作
         while(getline(in, line)){
             get_info(line, opera, new_kv);
             if(opera == "INSERT"){
@@ -50,6 +65,11 @@ void load(PmEHash* ehash){
     }
 }
 
+/**
+ * @description: 执行run阶段操作
+ * @param PmEHash*: PmEHash实例
+ * @return: NULL
+ */
 void run(PmEHash* ehash){
     for(int i = 0; i < run_file->length(); i++){
         ifstream in(run_file[i]);
@@ -89,18 +109,21 @@ int mian(){
     double diff1, diff2;
     clock_t start, middle, end;
     PmEHash* ehash = new PmEHash;
+
     start = clock();
     load(ehash);
     middle = clock();
     run(ehash);
     end = clock();
+
     diff1 = (double)(middle - start);
     diff2 = (double)(end - middle);
-    cout << "Load time is " << diff1 / CLOCKS_PER_SEC << endl;
-    cout << "Run time is " << diff2 / CLOCKS_PER_SEC << endl;
     double total = 0;
     for(int i = 0; i < 4; i++)
         total += ope[i];
+        
+    cout << "Load time is " << diff1 / CLOCKS_PER_SEC << endl;
+    cout << "Run time is " << diff2 / CLOCKS_PER_SEC << endl;
     cout << "Total operations : " << total << endl;
     cout << "Insert operation : " << ope[0] / total << endl;
     cout << "Remove operation : " << ope[1] / total << endl;
