@@ -7,13 +7,19 @@ USER_HEADER_DIR = ../include
 # Flags passed to the C++ compiler.
 CXXFLAGS += -g -w -pthread -std=c++11
 
+BIN = bin
 
+YCSB = ./bin/ycsb
 
-ycsb: ycsb.o pm_ehash.o data_page.o 
+$(YCSB): ycsb.o pm_ehash.o data_page.o | $(BIN)
 	${CXX} ${CXXFLAGS} $^ -lpmem -o $@
 
-%.o: %.cpp 
+%.o: %.cpp
 	${CXX} ${CXXFLAGS} -I ${USER_HEADER_DIR} -o $@ -c $^
+
+
+$(BIN):
+	mkdir -p bin
 
 clean :
 	rm -f *.o ../data/*
