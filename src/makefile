@@ -5,7 +5,7 @@
 USER_HEADER_DIR = ../include
 
 # Flags passed to the C++ compiler.
-CXXFLAGS += -g -pthread -std=c++11
+CXXFLAGS += -g -w -pthread -std=c++11
 
 
 
