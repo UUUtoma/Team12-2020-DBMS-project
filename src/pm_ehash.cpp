@@ -60,19 +60,19 @@ PmEHash::PmEHash() {
  * @return: NULL
  */
 PmEHash::~PmEHash() {
-	int is_pmem = pmem_is_pmem(metadata, sizeof(ehash_metadata));
-	if (is_pmem)
-		pmem_persist(metadata, sizeof(ehash_metadata));
-	else
-		pmem_msync(metadata, sizeof(ehash_metadata));
-	pmem_unmap(metadata, sizeof(ehash_metadata));
+    int is_pmem = pmem_is_pmem(metadata, sizeof(ehash_metadata));
+    if (is_pmem)
+        pmem_persist(metadata, sizeof(ehash_metadata));
+    else
+        pmem_msync(metadata, sizeof(ehash_metadata));
+    pmem_unmap(metadata, sizeof(ehash_metadata));
 
-	is_pmem = pmem_is_pmem(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
-	if (is_pmem)
-		pmem_persist(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
-	else
-		pmem_msync(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
-	pmem_unmap(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
+    is_pmem = pmem_is_pmem(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
+    if (is_pmem)
+        pmem_persist(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
+    else
+        pmem_msync(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
+    pmem_unmap(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
 }
 
 /**
@@ -81,18 +81,18 @@ PmEHash::~PmEHash() {
  * @return: 0 = insert successfully, -1 = fail to insert(target data with same key exist)
  */
 int PmEHash::insert(kv new_kv_pair) {
-	uint64_t temp_value;
+    uint64_t temp_value;
     //限制条件：若已存在则返回
-	if (search(new_kv_pair.key, temp_value) == 0)	return -1;
-	pm_bucket* bucket = getFreeBucket(new_kv_pair.key);
-	kv* freePlace = getFreeKvSlot(bucket);
-	*freePlace = new_kv_pair;
-	int index = freePlace - bucket->slot;
-	//bucket->bitmap[index / 8] |= (1 << (BUCKET_SLOT_NUM - index - 1));
+    if (search(new_kv_pair.key, temp_value) == 0)   return -1;
+    pm_bucket* bucket = getFreeBucket(new_kv_pair.key);
+    kv* freePlace = getFreeKvSlot(bucket);
+    *freePlace = new_kv_pair;
+    int index = freePlace - bucket->slot;
     //设置位图为1
-    bucket->bitmap[index / 8] ^= (bucket->bitmap[index / 8] & (1 << (index % 8))) ^ (1 << (index % 8));
-	//persist(freePlace);
-	return 0;
+    bucket->bitmap[index / 8] |= (1 << (index % 8));
+    //bucket->bitmap[index / 8] ^= (bucket->bitmap[index / 8] & (1 << (index % 8))) ^ (1 << (index % 8));
+    //persist(freePlace);
+    return 0;
 }
 
 /** 
@@ -101,34 +101,63 @@ int PmEHash::insert(kv new_kv_pair) {
  * @return: 0 = removing successfully, -1 = fail to remove(target data doesn't exist)
  */
 int PmEHash::remove(uint64_t key) {
-    uint64_t ret_val;
-    if (search(key, ret_val) == -1) return -1;
-	uint64_t bucket_id = hashFunc(key);
-	pm_bucket** virtual_address = catalog.buckets_virtual_address;
-	// pm_bucket bucket = *(virtual_address[bucket_id]);
+    uint64_t temp_value;
+    if (search(key, temp_value) == -1) return -1;
+    uint64_t bucket_id = hashFunc(key);
+    pm_bucket** virtual_address = catalog.buckets_virtual_address;
     pm_bucket* bucket = virtual_address[bucket_id];
 
-    //遍历bucket中的slot，查找符合条件的kv
-	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
-		kv* temp = bucket->slot + i;
-		if (temp == NULL)	break;
-		if ((*temp).key == key) {
-			//设置位图为0
-            bucket->bitmap[i / 8] ^= (bucket->bitmap[i / 8] & (1 << (i % 8))) ^ (0 << (i % 8));
+    uint8_t temp;
+    for (int i = 0; i < BUCKET_SLOT_NUM; ++i){
+        temp = bucket->bitmap[i / 8];
+        //if exists
+        if ((temp >> (i % 8)) & 1){
+            bucket->bitmap[i / 8] &= ~(1 << (i % 8));
             //遍历检验位图，若都为0，则为空桶，执行mergeBucket()
             int k, j;
-			for(k = 0; k < BUCKET_SLOT_NUM / 8 + 1; k++){
+            for(k = 0; k < BUCKET_SLOT_NUM / 8 + 1; k++){
                 for(j = 0; j < 8; j++){
                     if((((bucket->bitmap[k]) & (1 << j)) >> j) == 1)
                         break;
                 }
             }
-			if(k * 8 - j == BUCKET_SLOT_NUM) 
+            if(k * 8 - j == BUCKET_SLOT_NUM) 
                 mergeBucket(bucket_id);
-			return 0;
-		}
-	}
-	return -1;
+            return 0;
+        }
+    }
+
+    return -1;
+/*
+    uint64_t ret_val;
+    if (search(key, ret_val) == -1) return -1;
+    uint64_t bucket_id = hashFunc(key);
+    pm_bucket** virtual_address = catalog.buckets_virtual_address;
+    // pm_bucket bucket = *(virtual_address[bucket_id]);
+    pm_bucket* bucket = virtual_address[bucket_id];
+
+    //遍历bucket中的slot，查找符合条件的kv
+    for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+        kv* temp = bucket->slot + i;
+        if (temp == NULL)   break;
+        if ((*temp).key == key) {
+            //设置位图为0
+            bucket->bitmap[i / 8] ^= (bucket->bitmap[i / 8] & (1 << (i % 8))) ^ (0 << (i % 8));
+            //遍历检验位图，若都为0，则为空桶，执行mergeBucket()
+            int k, j;
+            for(k = 0; k < BUCKET_SLOT_NUM / 8 + 1; k++){
+                for(j = 0; j < 8; j++){
+                    if((((bucket->bitmap[k]) & (1 << j)) >> j) == 1)
+                        break;
+                }
+            }
+            if(k * 8 - j == BUCKET_SLOT_NUM) 
+                mergeBucket(bucket_id);
+            return 0;
+        }
+    }
+    return -1;
+*/
 }
 /**
  * @description: 更新现存的键值对的值
@@ -136,19 +165,34 @@ int PmEHash::remove(uint64_t key) {
  * @return: 0 = update successfully, -1 = fail to update(target data doesn't exist)
  */
 int PmEHash::update(kv kv_pair) {
-	uint64_t bucket_id = hashFunc(kv_pair.key);
-	pm_bucket** virtual_address = catalog.buckets_virtual_address;
-	pm_bucket bucket = *(virtual_address[bucket_id]);
+    uint64_t bucket_id = hashFunc(kv_pair.key);
+    pm_bucket** virtual_address = catalog.buckets_virtual_address;
+    pm_bucket* bucket = virtual_address[bucket_id];
 
-	for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
-		kv* temp = bucket.slot + i;
-		if (temp == NULL)	break;
-		if ((*temp).key == kv_pair.key) {
-			(bucket.slot[i]).value = kv_pair.value;
-			return 0;
-		}
-	}
-	return -1;
+    uint8_t temp;
+    for (int i = 0; i < BUCKET_SLOT_NUM; ++i){
+        temp = bucket->bitmap[i / 8];
+        //if exists
+        if ((temp >> (i % 8)) & 1){
+            (bucket->slot[i]).value = kv_pair.value;
+            return 0;
+        }
+    }
+
+    return -1;
+
+/*
+    for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
+        kv* temp = bucket.slot + i;
+        if (temp == NULL)   break;
+        if ((*temp).key == kv_pair.key) {
+            (bucket.slot[i]).value = kv_pair.value;
+            return 0;
+        }
+    }
+
+    return -1;
+*/
 }
 /**
  * @description: 查找目标键值对数据，将返回值放在参数里的引用类型进行返回
@@ -157,19 +201,28 @@ int PmEHash::update(kv kv_pair) {
  * @return: 0 = search successfully, -1 = fail to search(target data doesn't exist) 
  */
 int PmEHash::search(uint64_t key, uint64_t& return_val) {
-	uint64_t bucket_id = hashFunc(key);
-	//pm_bucket** virtual_address = catalog.buckets_virtual_address;
-	pm_bucket* bucket = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
-	if (bucket == nullptr)	return -1;//
+    uint64_t bucket_id = hashFunc(key);
+    pm_bucket* bucket = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
+    if (bucket == nullptr)  return -1;
 
-	/*for (int i = 0; i < BUCKET_SLOT_NUM; ++i) {
-		kv* temp = bucket->slot + i;
-		if (temp == nullptr)	break;
-		if ((*temp).key == key) {
-			return_val = (*temp).value;
-			return 0;
-		}
-	}*/
+    uint8_t temp;
+    for (int i = 0; i < BUCKET_SLOT_NUM; ++i){
+        temp = bucket->bitmap[i / 8];
+        //if exists
+        if ((temp >> (i % 8)) & 1){
+            return_val = (bucket->slot[i]).value;
+            return 0;
+        }
+    }
+
+    return -1;
+
+/*
+    uint64_t bucket_id = hashFunc(key);
+    //pm_bucket** virtual_address = catalog.buckets_virtual_address;
+    pm_bucket* bucket = pmAddr2vAddr.find(catalog.buckets_pm_address[bucket_id])->second;
+    if (bucket == nullptr)  return -1;//
+
     //循环遍历，若位图为1且key符合条件，则设置return_val且返回0
     for(int i = 0; i < BUCKET_SLOT_NUM / 8 + 1; i++){
         for(int j = 0; j < 8; j++){
@@ -179,7 +232,8 @@ int PmEHash::search(uint64_t key, uint64_t& return_val) {
             }
         }
     }
-	return -1;
+    return -1;
+*/
 }
 
 /**
@@ -216,6 +270,16 @@ pm_bucket* PmEHash::getFreeBucket(uint64_t key) {
  * @return: 空闲键值对位置的虚拟地址
  */
 kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
+    uint8_t temp;
+    for (int i = 0; i < BUCKET_SLOT_NUM; ++i){
+        temp = bucket->bitmap[i / 8];
+        //if exists
+        if (~((temp >> (i % 8)) & 1)){
+            return &(bucket->slot[i]);
+        }
+    }
+    return NULL;
+/*    
     kv* freekv = NULL;
     //遍历位图数组，对每个uint8_t类型数值遍历查看每一位是否为0（表示空闲），找到相应空闲位置并返回
     for(int i = 0; i < BUCKET_SLOT_NUM / 8 + 1; i++){
@@ -228,6 +292,7 @@ kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
     }
     //若没有空闲位置，返回空指针
     return freekv;
+*/
 }
 
 /**
@@ -319,7 +384,7 @@ void PmEHash::mergeBucket(uint64_t bucket_id) {
     // delete(catalog.buckets_virtual_address[bucket_id]);
     // freePageSlot(catalog.buckets_virtual_address[bucket_id]);
     int slot_index = addr.offset / sizeof(pm_bucket);
-	pages_virtual_addr[addr.fileId]->bitmap[slot_index] = 0;
+    pages_virtual_addr[addr.fileId]->bitmap[slot_index] = 0;
     free_list.push(catalog.buckets_virtual_address[bucket_id]);
 
     //删除map中需要合并的桶的实地址、虚地址关系
@@ -408,8 +473,8 @@ void PmEHash::extendCatalog() {
  * @return: NULL
  */
 void PmEHash::selfDestory() {
-	char command_line[256];
-	sprintf(command_line, "rm -f %s/*", PM_EHASH_DIRECTORY);
-	system(command_line);
-	return;
+    char command_line[256];
+    sprintf(command_line, "rm -f %s/*", PM_EHASH_DIRECTORY);
+    system(command_line);
+    return;
 }
