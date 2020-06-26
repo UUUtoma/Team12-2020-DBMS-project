@@ -22,7 +22,7 @@ $(BIN):
 	mkdir -p bin
 
 clean :
-	rm -f *.o ../data/*
+	rm -f $(YCSB) *.o ../data/*
 
 cleano :
 	rm -f *.o
