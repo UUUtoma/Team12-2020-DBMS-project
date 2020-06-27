@@ -1,0 +1,7 @@
+执行make：
+  cd src
+  make
+  
+执行程序：
+  cd bin
+  ./ycsb
