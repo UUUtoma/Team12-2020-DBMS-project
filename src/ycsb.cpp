@@ -49,7 +49,7 @@ void get_info(string line, string& opera, kv& new_kv){
  * @return: NULL
  */
 void load(PmEHash* ehash){
-    for(int i = 0; i < load_file->length(); i++){
+    for(int i = 0; i < sizeof(load_file)/sizeof(load_file[0]); i++){
         clock_t start = clock();
         ifstream in(dir + load_file[i]);
         if(!in){
@@ -83,7 +83,7 @@ void load(PmEHash* ehash){
  * @return: NULL
  */
 void run(PmEHash* ehash){
-    for(int i = 0; i < run_file->length(); i++){
+    for(int i = 0; i < sizeof(run_file)/sizeof(run_file[0]); i++){
         clock_t start = clock();
         ifstream in(dir + run_file[i]);
         if(!in){
@@ -149,12 +149,12 @@ int main(){
     cout << "Read operation ratio: " << ope[3] / total << endl;
     cout << "OPS : " << total / ((end - start) / CLOCKS_PER_SEC) << endl;
     cout << "Load file running time : " << endl;
-    for(int i = 0; i < load_file->length(); i++){
+    for(int i = 0; i < sizeof(load_file)/sizeof(load_file[0]); i++){
         cout << load_file[i] << " : " << time_queue.front() << endl;
         time_queue.pop();
     }
     cout << "Run file running time : " << endl;
-    for(int i = 0; i < run_file->length(); i++){
+    for(int i = 0; i < sizeof(run_file)/sizeof(run_file[0]); i++){
         cout << run_file[i] << " : " << time_queue.front() << endl;
         time_queue.pop(); 
     }
