@@ -17,15 +17,17 @@ using std::make_pair;
  * @return: 新槽位的虚拟地址
  */
 void* PmEHash::getFreeSlot(pm_address& new_address) {
+	// 若没有可用数据页，申请新数据页
 	if (free_list.empty())
 		allocNewPage();
+	// 获得可用数据页槽位
 	pm_bucket* free_slot = free_list.front();
 	free_list.pop();
 	new_address = (vAddr2pmAddr.find(free_slot))->second;
-	
-	// set page slot
+	// 被使用的数据页槽位对应位图置1
 	int slot_index = new_address.offset / sizeof(pm_bucket);
 	pages_virtual_addr[new_address.fileId]->bitmap[slot_index] = 1;
+	// 页文件数据持久化
 	pmem_persist(pages_virtual_addr[new_address.fileId], sizeof(data_page));
 
 	return free_slot;
@@ -37,7 +39,7 @@ void* PmEHash::getFreeSlot(pm_address& new_address) {
  * @return: NULL
  */
 void PmEHash::allocNewPage() {
-	// new page
+	// 创建新的数据页文件
 	size_t map_len;
 	int is_pmem;
 	stringstream ss;
@@ -45,7 +47,7 @@ void PmEHash::allocNewPage() {
 	data_page* new_page = (data_page*)pmem_map_file(ss.str().c_str(), sizeof(data_page), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
 	// 更新 pages_virtual_addr
 	pages_virtual_addr.push_back(new_page);
-	// 产生新空桶, 更新 free_list, vAddr2pmAddr, pmAddr2vAddr
+	// 初始化新空桶, 更新 free_list, vAddr2pmAddr, pmAddr2vAddr
 	for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i) {
 		pm_bucket* v_addr = &(pages_virtual_addr.back()->slots[i]);
 		pm_address pm_addr = {(uint32_t)metadata->max_file_id, (uint32_t)(i * sizeof(pm_bucket))};
@@ -60,12 +62,14 @@ void PmEHash::allocNewPage() {
 		vAddr2pmAddr.insert(make_pair(v_addr, pm_addr));
     	pmAddr2vAddr.insert(make_pair(pm_addr, v_addr));
 	}
+	// 页文件数据持久化
 	pmem_persist(new_page, map_len);
 	// 若此时unmap，页虚地址失效，应该在析构函数unmap
 	// pmem_unmap(new_page, map_len);
 
 	// 更新 metadata
 	metadata->max_file_id++;
+	// metadata 数据持久化
 	pmem_persist(metadata, sizeof(ehash_metadata));
 
 }
@@ -86,7 +90,8 @@ void PmEHash::recover() {
 	metadata = (ehash_metadata*)pmem_map_file(metadata_path, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
 	// 读取catalog文件中的数据并内存映射
 	catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(ehash_catalog), PMEM_FILE_CREATE, 0666, &map_len, &is_pmem);
- 	// 读取所有数据页文件并内存映射
+	//catalog = (ehash_catalog*)pmem_map_file(path_ss.str().c_str(), sizeof(ehash_catalog), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
+ 	// 读取所有数据页文件并内存映射，设置地址映射关系
  	// 设置可扩展哈希的桶的虚拟地址指针
  	mapAllPage();
 	return;
@@ -102,7 +107,7 @@ void PmEHash::mapAllPage() {
 	pm_address* b_pm_addr = catalog.buckets_pm_address;
 	pm_bucket** b_v_addr = catalog.buckets_virtual_address;
 	pages_virtual_addr.resize(metadata->max_file_id); // virtual address of all data_page
-	bool page_has_map[metadata->max_file_id];
+	bool page_has_map[metadata->max_file_id]; // 记录已被内存映射的数据页
  	int i;
  	for (i = 0; i < catalog_size / DATA_PAGE_SLOT_NUM + 1; ++i) {
  		page_has_map[i] = false;
@@ -119,7 +124,7 @@ void PmEHash::mapAllPage() {
 			path_ss << "/" << fid;
     		pages_virtual_addr[fid] = (data_page*)pmem_map_file(path_ss.str().c_str(), sizeof(data_page), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
     		page_has_map[fid] = true;
-    		// 初始化free_list
+    		// 初始化free_list，将当前page中的空槽位添加到free_list
     		int j;
 	    	for (j = 0; j < pages_virtual_addr[fid]->bitmap.size(); ++j) {
 	    		if (pages_virtual_addr[fid]->bitmap[j] == 0) free_list.push(&(pages_virtual_addr[fid]->slots[j]));
@@ -140,15 +145,18 @@ void PmEHash::mapAllPage() {
  * @return: NULL
  */
 void PmEHash::freePageSlot(pm_bucket* bucket) {
+	// 计算页号与槽号
 	pm_address pm_addr = vAddr2pmAddr.find(bucket)->second;
 	int slot_index = pm_addr.offset / sizeof(pm_bucket);
+	// 对应槽位图置0
 	pages_virtual_addr[pm_addr.fileId]->bitmap[slot_index] = 0;
+	// 页文件数据持久化
 	pmem_persist(pages_virtual_addr[pm_addr.fileId], sizeof(data_page));
 }
 
 
 /**
- * @description: 首次创建数据页，默认的初始桶对应的slot不用压入free_list
+ * @description: 首次创建数据页，与allocNewPage不同：默认的初始桶对应的slot不用压入free_list
  * @param int: 
  * @return: NULL
  */
@@ -162,7 +170,7 @@ void PmEHash::firstNewPage(int default_bucket_count) {
 	// 更新 pages_virtual_addr
 	pages_virtual_addr.resize(2);
 	pages_virtual_addr[1] = new_page;
-	// 产生新空桶, 更新 free_list, vAddr2pmAddr, pmAddr2vAddr
+	// 初始化新空桶, 更新 free_list, vAddr2pmAddr, pmAddr2vAddr
 	for (int i = 0; i < DATA_PAGE_SLOT_NUM; ++i) {
 		pm_bucket* v_addr = &(pages_virtual_addr.back()->slots[i]);
 		pm_address pm_addr = {(uint32_t)metadata->max_file_id, (uint32_t)(i * sizeof(pm_bucket))};
@@ -172,19 +180,21 @@ void PmEHash::firstNewPage(int default_bucket_count) {
 		for (int j = 0; j < BUCKET_SLOT_NUM; ++j) {
 			v_addr->bitmap[j / 8] ^= (v_addr->bitmap[j / 8] & (1 << (j % 8))) ^ (0 << (j % 8));
 		}
-		
+		// 如果当前桶是默认桶，则对应数据页的槽位不添加到free_list
 		if (i >= default_bucket_count) {
 			free_list.push(&(new_page->slots[i]));
 		}
 		vAddr2pmAddr.insert(make_pair(v_addr, pm_addr));
     	pmAddr2vAddr.insert(make_pair(pm_addr, v_addr));
 	}
+	// 页文件数据持久化
 	pmem_persist(new_page, map_len);
 	// 若此时unmap，页虚地址失效，应该在析构函数unmap
 	// pmem_unmap(new_page, map_len);
 
 	// 更新 metadata
 	metadata->max_file_id++;
+	// metadata数据持久化
 	pmem_persist(metadata, sizeof(ehash_metadata));
 
 }
