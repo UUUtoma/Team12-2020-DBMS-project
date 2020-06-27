@@ -80,6 +80,16 @@ PmEHash::~PmEHash() {
     
     //取消catalog文件到持久性内存的映射
     pmem_unmap(catalog.buckets_pm_address, sizeof(catalog.buckets_pm_address) * metadata->catalog_size);
+
+    // 将数据页文件更改持久存储在持久性内存中，取消数据页文件到持久性内存的映射
+    for (vector<data_page*>::iterator i = pages_virtual_addr.begin(); i != pages_virtual_addr.end(); ++i) {
+    	is_pmem = pmem_is_pmem((*i), sizeof(data_page));
+    	if (is_pmem)
+    		pmem_persist((*i), sizeof(data_page));
+    	else
+    		pmem_msync((*i), sizeof(data_page));
+    	pmem_unmap((*i), sizeof(data_page));
+    }
 }
 
 /**
