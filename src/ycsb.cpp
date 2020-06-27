@@ -3,6 +3,7 @@
 #include <sstream>
 #include <ctime>
 #include <string>
+#include <queue>
 #include "pm_ehash.h"
 #include "data_page.h"
 using namespace std;
@@ -16,7 +17,10 @@ string run_file[] = {"1w-rw-50-50-run.txt","10w-rw-0-100-run.txt","10w-rw-25-75-
                     "220w-rw-50-50-run.txt"};
 //每个操作的数量，分别为insert、remove、update、read
 double ope[4] = {0};
+//load、run文件目录
 string dir = "../../workloads/";
+//存储每个文件的运行时间
+queue<double> time_queue;
 
 /**
  * @description: 读入一行，返回包含的操作类型和kv
@@ -46,6 +50,7 @@ void get_info(string line, string& opera, kv& new_kv){
  */
 void load(PmEHash* ehash){
     for(int i = 0; i < load_file->length(); i++){
+        clock_t start = clock();
         ifstream in(dir + load_file[i]);
         if(!in){
             cout << "error opening load file" << endl;
@@ -62,12 +67,13 @@ void load(PmEHash* ehash){
                 ope[0]++;
             }
             if(in.fail()){
-                cout << "1";
                 break;
-            }  
+            }
         }
-        cout  << "1";
         in.close();
+        clock_t end = clock();
+        double time = (double)(end - start) / CLOCKS_PER_SEC;
+        time_queue.push(time);
     }
 }
 
@@ -78,6 +84,7 @@ void load(PmEHash* ehash){
  */
 void run(PmEHash* ehash){
     for(int i = 0; i < run_file->length(); i++){
+        clock_t start = clock();
         ifstream in(dir + run_file[i]);
         if(!in){
             cout << "error opening run file" << endl;
@@ -110,6 +117,9 @@ void run(PmEHash* ehash){
                 break;
         }
         in.close();
+        clock_t end = clock();
+        double time = (double)(end - start) / CLOCKS_PER_SEC;
+        time_queue.push(time);
     }
 }
 
@@ -132,12 +142,23 @@ int main(){
         
     cout << "Load time is " << diff1 / CLOCKS_PER_SEC << endl;
     cout << "Run time is " << diff2 / CLOCKS_PER_SEC << endl;
-    cout << "Total operations : " << total << endl;
-    cout << "Insert operation : " << ope[0] / total << endl;
-    cout << "Remove operation : " << ope[1] / total << endl;
-    cout << "Update operation : " << ope[2] / total << endl;
-    cout << "Read operation : " << ope[3] / total << endl;
+    cout << "Total operation number: " << total << endl;
+    cout << "Insert operation ratio: " << ope[0] / total << endl;
+    cout << "Remove operation ratio: " << ope[1] / total << endl;
+    cout << "Update operation ratio: " << ope[2] / total << endl;
+    cout << "Read operation ratio: " << ope[3] / total << endl;
     cout << "OPS : " << total / ((end - start) / CLOCKS_PER_SEC) << endl;
+    cout << "Load file running time : " << endl;
+    for(int i = 0; i < load_file->length(); i++){
+        cout << load_file[i] << " : " << time_queue.front() << endl;
+        time_queue.pop();
+    }
+    cout << "Run file running time : " << endl;
+    for(int i = 0; i < run_file->length(); i++){
+        cout << run_file[i] << " : " << time_queue.front() << endl;
+        time_queue.pop(); 
+    }
 
     ehash->selfDestory();
+    return 0;
 }

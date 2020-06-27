@@ -50,8 +50,7 @@ void PmEHash::allocNewPage() {
     	pmAddr2vAddr.insert(make_pair(pm_addr, v_addr));
 	}
 	pmem_persist(new_page, map_len);
-	// 若此时unmap，页虚地址失效，应该在析构函数unmap
-	// pmem_unmap(new_page, map_len);
+
 
 	// 更新 metadata
 	metadata->max_file_id++;
@@ -74,7 +73,7 @@ void PmEHash::recover() {
 	metadata = (ehash_metadata*)pmem_map_file(metadata_path, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
 	// 读取catalog文件中的数据并内存映射
 	catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(ehash_catalog), PMEM_FILE_CREATE, 0666, &map_len, &is_pmem);
-	//catalog = (ehash_catalog*)pmem_map_file(path_ss.str().c_str(), sizeof(ehash_catalog), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
+
  	// 读取所有数据页文件并内存映射
  	// 设置可扩展哈希的桶的虚拟地址指针
  	mapAllPage();
