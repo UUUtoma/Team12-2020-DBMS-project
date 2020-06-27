@@ -1,7 +1,0 @@
-执行make：
-  cd test
-  make
-  
-运行程序：
-  cd bin
-  ./ehash_test
