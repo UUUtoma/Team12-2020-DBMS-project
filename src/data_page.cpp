@@ -87,9 +87,9 @@ void PmEHash::recover() {
 	sprintf(metadata_path, "%s/%s", PM_EHASH_DIRECTORY, META_NAME);
 	sprintf(catalog_path, "%s/%s", PM_EHASH_DIRECTORY, CATALOG_NAME);
 	// 读取metadata文件中的数据并内存映射
-	metadata = (ehash_metadata*)pmem_map_file(metadata_path, sizeof(ehash_metadata), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
+	metadata = (ehash_metadata*)pmem_map_file(metadata_path, sizeof(ehash_metadata), 0, 0666, &map_len, &is_pmem);
 	// 读取catalog文件中的数据并内存映射
-	catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(ehash_catalog), PMEM_FILE_CREATE, 0666, &map_len, &is_pmem);
+	catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(ehash_catalog), 0, 0666, &map_len, &is_pmem);
 	//catalog = (ehash_catalog*)pmem_map_file(path_ss.str().c_str(), sizeof(ehash_catalog), PMEM_FILE_CREATE, 0777, &map_len, &is_pmem);
  	// 读取所有数据页文件并内存映射，设置地址映射关系
  	// 设置可扩展哈希的桶的虚拟地址指针
