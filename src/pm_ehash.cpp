@@ -216,7 +216,7 @@ kv* PmEHash::getFreeKvSlot(pm_bucket* bucket) {
     uint8_t temp;
     for (int i = 0; i < BUCKET_SLOT_NUM; ++i){
         temp = bucket->bitmap[i / 8];
-        //if exists
+        //如果空闲位置存在
         if (~((temp >> (i % 8)) & 1)){
             return &(bucket->slot[i]);
         }
