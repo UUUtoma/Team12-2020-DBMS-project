@@ -176,8 +176,8 @@ int main(){
         else speed[i] = ope[i] / t[i];
     }
         
-    cout << "Load time is " << diff1 / CLOCKS_PER_SEC << endl;
-    cout << "Run time is " << diff2 / CLOCKS_PER_SEC << endl;
+    cout << "Load time is " << diff1 / CLOCKS_PER_SEC << "seconds" << endl;
+    cout << "Run time is " << diff2 / CLOCKS_PER_SEC << "seconds" << endl;
 
     cout << "Total operation number: " << total << endl;
     cout << "Insert operation ratio: " << ope[0] / total << endl;
@@ -188,21 +188,21 @@ int main(){
 
     cout << "Load file running time : " << endl;
     for(int i = 0; i < sizeof(load_file)/sizeof(load_file[0]); i++){
-        cout << load_file[i] << " : " << time_queue.front() << endl;
+        cout << load_file[i] << " : " << time_queue.front() << "seconds" << endl;
         time_queue.pop();
     }
 
     cout << "Run file running time : " << endl;
     for(int i = 0; i < sizeof(run_file)/sizeof(run_file[0]); i++){
-        cout << run_file[i] << " : " << time_queue.front() << endl;
+        cout << run_file[i] << " : " << time_queue.front() << "seconds" << endl;
         time_queue.pop(); 
 
     }
     cout << "Speed of operations: " << endl;
-    cout << "Insert oparation's speed : " << speed[0] << endl;
-    cout << "Remove oparation's speed : " << speed[1] << endl;
-    cout << "Update oparation's speed : " << speed[2] << endl;
-    cout << "Read oparation's speed : " << speed[3] << endl;
+    cout << "Insert oparation's speed : " << speed[0] << "ope per second" << endl;
+    cout << "Remove oparation's speed : " << speed[1] << "ope per second" << endl;
+    cout << "Update oparation's speed : " << speed[2] << "ope per second" << endl;
+    cout << "Read oparation's speed : " << speed[3] << "ope per second" << endl;
 
     ehash->selfDestory();
 
