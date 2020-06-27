@@ -26,7 +26,6 @@ string dir = "../../workloads/";
 queue<double> time_queue;
 
 
-
 /**
  * @description: 读入一行，返回包含的操作类型和kv
  * @param string: 从文件读入的一行
@@ -129,7 +128,6 @@ void run(PmEHash* ehash){
                 ehash->search(new_kv.key, return_value);
                 e = clock();
                 t[3] += (double)(e - s) / CLOCKS_PER_SEC;
-                cout << return_value << endl;
                 ope[3]++;
 
             }
@@ -154,6 +152,7 @@ void run(PmEHash* ehash){
 
 
 int main(){
+    cout << "Running..." << endl;
     double diff1, diff2;
     clock_t start, middle, end;
     PmEHash* ehash = new PmEHash;
