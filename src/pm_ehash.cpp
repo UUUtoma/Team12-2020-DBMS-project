@@ -337,14 +337,19 @@ void PmEHash::mergeBucket(uint64_t bucket_id) {
  * @return: NULL
  */
 void PmEHash::extendCatalog() {
+    //更改元数据
     metadata->global_depth++;
     metadata->catalog_size *= 2;
 
+    //扩展目录的中的pm_address
     memcpy((void*)(catalog.buckets_pm_address + (metadata->catalog_size * sizeof(pm_address)) / 2), (void*)catalog.buckets_pm_address, (metadata->catalog_size * sizeof(pm_address)) / 2);
 
+    //申请新的虚拟地址的空间
     pm_bucket** new_buckets_virtual_address = new pm_bucket* [metadata->catalog_size];
+    //复制旧的虚拟地址到新的虚拟地址
     memcpy((void*)new_buckets_virtual_address, (void*)catalog.buckets_virtual_address, sizeof(pm_bucket*) * metadata->catalog_size / 2);
     memcpy((void*)(new_buckets_virtual_address + metadata->catalog_size / 2), (void*)catalog.buckets_virtual_address, sizeof(pm_bucket*) * metadata->catalog_size / 2);
+    //删除旧的虚拟地址并将新的虚拟地址赋给目录
     delete[] catalog.buckets_virtual_address;
     catalog.buckets_virtual_address = new_buckets_virtual_address;
 
