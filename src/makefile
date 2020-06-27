@@ -13,7 +13,7 @@ DATA = ../data
 
 YCSB = ./bin/ycsb
 
-$(YCSB): ycsb.o pm_ehash.o data_page.o | $(BIN)
+$(YCSB): ycsb.o pm_ehash.o data_page.o | $(DATA) $(BIN)
 	${CXX} ${CXXFLAGS} $^ -lpmem -o $@
 
 %.o: %.cpp
