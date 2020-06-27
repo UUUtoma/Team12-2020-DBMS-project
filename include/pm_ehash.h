@@ -96,6 +96,7 @@ private:
     void extendCatalog();
     void* getFreeSlot(pm_address& new_address);
     void allocNewPage();
+    void firstNewPage(int default_bucket_count);
 
     void recover();
     void mapAllPage();

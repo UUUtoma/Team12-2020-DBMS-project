@@ -32,23 +32,25 @@ PmEHash::PmEHash() {
         metadata->global_depth = 4;
 
         //new data_page
-        allocNewPage();
-
+        // allocNewPage();
+        firstNewPage(DEFAULT_CATALOG_SIZE);
         //new catalog.buckets_pm_address
         catalog.buckets_pm_address = (pm_address*)pmem_map_file(catalog_path, sizeof(pm_address)*DEFAULT_CATALOG_SIZE, PMEM_FILE_CREATE, 0777, &mapped_len, &is_pmem);
+        catalog.buckets_virtual_address = new pm_bucket*[DEFAULT_CATALOG_SIZE];
         for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
             catalog.buckets_pm_address[i].fileId = 1;
             catalog.buckets_pm_address[i].offset = i * sizeof(pm_bucket);
+            catalog.buckets_virtual_address[i] = pmAddr2vAddr[catalog.buckets_pm_address[i]];
         }
 
-        mapAllPage();
+        // mapAllPage();
 
         //new catalog.buckets_virtual_address
         //pm_bucket* new_bucket[DEFAULT_CATALOG_SIZE];
-        catalog.buckets_virtual_address = new pm_bucket*[DEFAULT_CATALOG_SIZE];
-        for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
-            catalog.buckets_virtual_address[i] = pmAddr2vAddr[catalog.buckets_pm_address[i]];
-        }
+        // catalog.buckets_virtual_address = new pm_bucket*[DEFAULT_CATALOG_SIZE];
+        // for (int i = 0; i < DEFAULT_CATALOG_SIZE; ++i){
+        //     catalog.buckets_virtual_address[i] = pmAddr2vAddr[catalog.buckets_pm_address[i]];
+        // }
         //catalog.buckets_virtual_address = new_bucket;
     }
     else 
