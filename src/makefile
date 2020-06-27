@@ -9,6 +9,8 @@ CXXFLAGS += -g -pthread -std=c++11
 
 BIN = bin
 
+DATA = ../data
+
 YCSB = ./bin/ycsb
 
 $(YCSB): ycsb.o pm_ehash.o data_page.o | $(BIN)
@@ -20,6 +22,9 @@ $(YCSB): ycsb.o pm_ehash.o data_page.o | $(BIN)
 
 $(BIN):
 	mkdir -p bin
+
+$(DATA):
+	mkdir -p ../data
 
 clean :
 	rm -f $(YCSB) *.o ../data/*
